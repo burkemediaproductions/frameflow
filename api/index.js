@@ -99,7 +99,11 @@ process.on('uncaughtException', (err) => {
 });
 
 /* ----------------------- Parsers & logging ------------------------- */
-app.use(express.json({ limit: '2mb' }));
+app.use((req, res, next) => {
+  const url = req.originalUrl || req.url || "";
+  if (url.startsWith("/api/gizmos/stripe/public/webhook")) return next();
+  return express.json({ limit: "2mb" })(req, res, next);
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -121,6 +125,8 @@ const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { require: true, rejectUnauthorized: false },
 });
+
+app.locals.pool = pool;
 
 pool.on('error', (err) => {
   console.error('[pg.pool error]', err);
