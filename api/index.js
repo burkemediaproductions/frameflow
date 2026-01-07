@@ -848,9 +848,6 @@ app.use('/api', authMiddleware, gizmosRouter);
 app.use('/api', authMiddleware, gadgetsRouter);
 app.use('/api', authMiddleware, widgetsRouter);
 
-// Gizmo Packs admin endpoints
-app.use('/api/gizmo-packs', gizmoPacksRouter);
-
 // redirects
 app.get('/content-types', (_req, res) => res.redirect(301, '/api/content-types'));
 app.get('/content/:slug', (req, res) => res.redirect(301, `/api/content/${req.params.slug}`));
@@ -872,7 +869,8 @@ async function start() {
   // Mount gizmo packs BEFORE listening
   await mountGizmoPacks(app);
 
-  // Optional: show only base mount points (Express won’t show nested routes reliably)
+  app.use('/api/gizmo-packs', gizmoPacksRouter);
+
   console.log('[BOOT] Gizmo packs mounted (see [GIZMOS] logs above).');
 
   const PORT = process.env.PORT || 4000;
@@ -880,6 +878,7 @@ async function start() {
     console.log('[BOOT] ServiceUp API listening on', PORT);
   });
 }
+
 
 start().catch((err) => {
   console.error('[BOOT] Failed to start:', err);
