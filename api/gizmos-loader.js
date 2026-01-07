@@ -15,6 +15,8 @@ export async function mountGizmoPacks(app) {
   const cwd = process.cwd();
   console.log("[GIZMOS] mountGizmoPacks() cwd =", cwd);
 
+  // We include both “api/src/gizmos” and “src/gizmos” styles because
+  // some installs run from repo root, and some run from /api as CWD.
   const baseDirs = [
     path.resolve(cwd, "api", "src", "gizmos"),
     path.resolve(cwd, "api", "gizmos"),
@@ -25,8 +27,6 @@ export async function mountGizmoPacks(app) {
   console.log("[GIZMOS] baseDirs =", baseDirs);
 
   const mounted = new Set();
-
-  const mountedInfo = [];
 
   for (const baseDir of baseDirs) {
     if (!fs.existsSync(baseDir)) {
@@ -65,10 +65,7 @@ export async function mountGizmoPacks(app) {
         const raw = fs.readFileSync(entry, "utf8");
         const badAtStart = raw.slice(0, 50);
         if (badAtStart.includes("||")) {
-          console.log(
-            `[GIZMOS] ${slug}: WARNING suspicious '||' near file start:`,
-            JSON.stringify(badAtStart)
-          );
+          console.log(`[GIZMOS] ${slug}: WARNING suspicious '||' near file start:`, JSON.stringify(badAtStart));
         }
 
         const mod = await import(pathToFileURL(entry).href);
@@ -77,15 +74,9 @@ export async function mountGizmoPacks(app) {
         if (pack && typeof pack.register === "function") {
           pack.register(app);
           mounted.add(slug);
-
-          // ✅ NEW: record for list endpoints / admin UI
-          mountedInfo.push({ slug, entry, baseDir });
-
           console.log(`[GIZMOS] Mounted: ${slug} (${entry})`);
         } else {
-          console.log(
-            `[GIZMOS] ${slug}: missing default export register(app) (skipping)`
-          );
+          console.log(`[GIZMOS] ${slug}: missing default export register(app) (skipping)`);
         }
       } catch (e) {
         console.error(`[GIZMOS] Failed to mount ${slug}.`);
@@ -99,17 +90,9 @@ export async function mountGizmoPacks(app) {
     }
   }
 
-  // ✅ NEW: expose mounted pack list for your /api/gizmo-packs router (Admin UI)
-  app.locals = app.locals || {};
-  app.locals.gizmoPacksMounted = Array.from(mounted);
-  app.locals.gizmoPacksMountedInfo = mountedInfo;
-
   if (!mounted.size) {
     console.log("[GIZMOS] No packs mounted.");
   } else {
     console.log("[GIZMOS] Mounted packs:", Array.from(mounted));
   }
-
-  // ✅ NEW: return list for debugging (optional)
-  return app.locals.gizmoPacksMounted;
 }
