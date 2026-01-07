@@ -1,0 +1,77 @@
+{
+  "id": "fitdegree",
+  "name": "fitDEGREE",
+  "version": "0.1.0",
+  "category": "Scheduling",
+  "description": "fitDEGREE scheduling + instructor listings. Provides public endpoints for featured classes and instructors, plus block definitions for ServiceUp UI.",
+  "requires_env": [
+    {
+      "key": "FITDEGREE_API_KEY",
+      "required": true,
+      "secret": true,
+      "default": ""
+    },
+    {
+      "key": "FITDEGREE_FITSPOT_ID",
+      "required": true,
+      "secret": false,
+      "default": "782"
+    },
+    {
+      "key": "FITDEGREE_API_BASE",
+      "required": false,
+      "secret": false,
+      "default": "https://api.fitdegree.com"
+    },
+    {
+      "key": "FITDEGREE_AUTH_HEADER",
+      "required": false,
+      "secret": false,
+      "default": "Authorization"
+    },
+    {
+      "key": "FITDEGREE_AUTH_SCHEME",
+      "required": false,
+      "secret": false,
+      "default": "Bearer"
+    }
+  ],
+  "provides": {
+    "api_routes": [
+      "/api/gizmos/fitdegree/public/featured-classes",
+      "/api/gizmos/fitdegree/public/instructors"
+    ],
+    "blocks": [
+      {
+        "id": "fitdegree-featured-classes",
+        "name": "Featured Classes",
+        "type": "data",
+        "endpoint": "/api/gizmos/fitdegree/public/featured-classes"
+      },
+      {
+        "id": "fitdegree-instructors",
+        "name": "Instructors Grid",
+        "type": "data",
+        "endpoint": "/api/gizmos/fitdegree/public/instructors"
+      },
+      {
+        "id": "fitdegree-schedule-widget",
+        "name": "Schedule Widget",
+        "type": "embed",
+        "embed": "<div data-fd-widget=\"fd-schedule\" data-fitspot-id=\"{{fitspot_id}}\" data-open-externally=\"false\" data-today-only=\"false\"></div>"
+      },
+      {
+        "id": "fitdegree-ooo-widget",
+        "name": "1-on-1 Services Widget",
+        "type": "embed",
+        "embed": "<div data-fd-widget=\"fd-ooo-services\" data-fitspot-id=\"{{fitspot_id}}\" data-open-externally=\"false\"></div>"
+      },
+      {
+        "id": "fitdegree-announcements-widget",
+        "name": "Announcements Widget",
+        "type": "embed",
+        "embed": "<div data-fd-widget=\"fd-announcements\" data-fitspot-id=\"{{fitspot_id}}\" data-open-externally=\"false\"></div>"
+      }
+    ]
+  }
+}

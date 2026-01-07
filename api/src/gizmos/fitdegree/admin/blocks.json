@@ -1,0 +1,36 @@
+[
+  {
+    "id": "fitdegree-featured-classes",
+    "name": "Featured Classes",
+    "kind": "data",
+    "endpoint": "/api/gizmos/fitdegree/public/featured-classes",
+    "fields": [
+      {
+        "key": "days",
+        "type": "number",
+        "default": 7
+      },
+      {
+        "key": "limit",
+        "type": "number",
+        "default": 6
+      }
+    ]
+  },
+  {
+    "id": "fitdegree-instructors",
+    "name": "Instructors Grid",
+    "kind": "data",
+    "endpoint": "/api/gizmos/fitdegree/public/instructors",
+    "fields": []
+  },
+  {
+    "id": "fitdegree-schedule-widget",
+    "name": "Schedule Widget",
+    "kind": "embed",
+    "required_scripts": [
+      "https://support.fitdegree.com/widget/fd-widget.min.js"
+    ],
+    "html": "<div data-fd-widget=\"fd-schedule\" data-fitspot-id=\"{{fitspot_id}}\" data-open-externally=\"false\" data-today-only=\"false\"></div>"
+  }
+]
