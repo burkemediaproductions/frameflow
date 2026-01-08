@@ -1,13 +1,16 @@
 const API_BASE = import.meta.env.VITE_API_BASE;
-
-/**
- * Optional: drop a URL into VITE_LOGO_URL if you want the logo to come from env
- * (Netlify supports VITE_* vars).
- * Otherwise, it shows a nice placeholder box.
- */
 const LOGO_URL = import.meta.env.VITE_LOGO_URL || "";
 
 // ---------- helpers ----------
+const safe = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[m]));
+
 const isPublished = (item) => String(item?.status || "").toLowerCase() === "published";
 const isSold = (item) => String(item?.status || "").toLowerCase() === "sold";
 
@@ -17,7 +20,6 @@ const pickImageUrl = (item) =>
   item?.primary_image?.url ||
   "";
 
-// TipTap doc -> plain text excerpt (good enough for MVP)
 const tiptapToText = (node) => {
   if (!node) return "";
   if (node.type === "text") return node.text || "";
@@ -42,7 +44,6 @@ const formatMoney = (cents, currency = "USD") => {
 const parsePriceStringToCents = (raw) => {
   const s = String(raw ?? "").trim();
   if (!s) return null;
-  // strip commas, $ etc. keep digits + dot
   const numeric = Number(s.replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
   return Math.round(numeric * 100);
@@ -51,25 +52,11 @@ const parsePriceStringToCents = (raw) => {
 const getPriceCents = (item) => {
   const cents = item?.price_cents;
   if (typeof cents === "number" && Number.isFinite(cents) && cents > 0) return cents;
-  // fallback to text "price" like "3,333.00"
   return parsePriceStringToCents(item?.price);
 };
 
-const channels = (item) => Array.isArray(item?.channel) ? item.channel : [];
-
-const dims = (item) => {
-  const w = item?.width_in;
-  const h = item?.height_in;
-  const d = item?.depth_in;
-  const parts = [];
-  if (Number.isFinite(w) && Number.isFinite(h)) parts.push(`${w}" × ${h}"`);
-  if (Number.isFinite(d) && d) parts.push(`${d}" deep`);
-  return parts.join(" • ");
-};
-
-const safe = (s) => String(s ?? "").replace(/[&<>"']/g, (m) => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-}[m]));
+const channels = (item) => (Array.isArray(item?.channel) ? item.channel : []);
+const wantsWebsite = (item) => channels(item).includes("Website");
 
 // ---------- UI ----------
 const app = document.querySelector("#app");
@@ -78,19 +65,23 @@ app.innerHTML = `
   <header class="topbar">
     <div class="nav">
       <div class="brand">
-        <div class="logo" aria-label="DCE Art logo">
-          ${LOGO_URL ? `<img src="${safe(LOGO_URL)}" alt="DCE Art">` : `<span style="font-weight:800;opacity:.9;">DCE</span>`}
+        <div class="logo" aria-label="DCE Gallery logo">
+          ${
+            LOGO_URL
+              ? `<img src="${safe(LOGO_URL)}" alt="DCE Gallery">`
+              : `<span style="font-weight:900; letter-spacing:-0.2px;">DCE</span>`
+          }
         </div>
         <div>
-          <h1>DCE Art</h1>
+          <h1>DCE Gallery</h1>
           <p>Curated pieces for collectors</p>
         </div>
       </div>
 
       <div class="actions">
-        <input id="search" class="pill search" type="search" placeholder="Search title, artist, year…" />
+        <input id="search" class="pill search" type="search" placeholder="Search titles…" />
         <select id="filter" class="pill" aria-label="Filter">
-          <option value="published">Published</option>
+          <option value="available">Available</option>
           <option value="all">All</option>
         </select>
       </div>
@@ -99,15 +90,19 @@ app.innerHTML = `
 
   <div class="container">
     <section class="hero">
-      <h2>Featured works</h2>
-      <p class="sub">
-        Browse available pieces. When you’re ready, purchase securely with Stripe.
-      </p>
+      <div class="heroTop">
+        <div>
+          <h2>Artwork for collectors.</h2>
+          <p class="sub">
+            A small, curated selection. New pieces added regularly.
+          </p>
+        </div>
+      </div>
 
-      <div class="statusRow">
-        <div class="statusLeft">
-          <div id="status">Loading…</div>
-          <div class="small" id="status2"></div>
+      <div class="heroCard">
+        <div>
+          <div id="status" style="font-weight:700;">Loading…</div>
+          <div id="status2" class="small"></div>
         </div>
         <div class="small">API: <span id="apiBase"></span></div>
       </div>
@@ -116,6 +111,11 @@ app.innerHTML = `
     <section>
       <div id="grid" class="grid"></div>
     </section>
+
+    <footer class="footer">
+      <div>© ${new Date().getFullYear()} DCE Gallery</div>
+      <div class="small">Secure checkout powered by Stripe (coming online).</div>
+    </footer>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -139,23 +139,29 @@ const toast = (msg) => {
   toastEl._t = window.setTimeout(() => toastEl.classList.remove("show"), 4200);
 };
 
+const normalizeListResponse = async (res) => {
+  const json = await res.json();
+  if (Array.isArray(json)) return json;
+  if (Array.isArray(json.items)) return json.items;
+  if (Array.isArray(json.data)) return json.data;
+  if (Array.isArray(json.rows)) return json.rows;
+  return [];
+};
+
 function applyFilters() {
   const q = (searchEl.value || "").trim().toLowerCase();
   const mode = filterEl.value;
 
   let items = [...ALL];
 
-  if (mode === "published") items = items.filter(isPublished);
+  // Default: only show published, not sold, and intended for Website channel
+  if (mode === "available") {
+    items = items.filter((x) => isPublished(x) && !isSold(x) && wantsWebsite(x));
+  }
 
   if (q) {
     items = items.filter((item) => {
-      const hay = [
-        item?.title,
-        item?.artist_name,
-        item?.year,
-        item?.sku,
-        item?.slug
-      ].join(" ").toLowerCase();
+      const hay = [item?.title, item?.slug].join(" ").toLowerCase();
       return hay.includes(q);
     });
   }
@@ -164,102 +170,97 @@ function applyFilters() {
 }
 
 function render(items) {
-  statusEl.textContent = `${items.length} item(s) shown`;
-  status2El.textContent = filterEl.value === "published"
-    ? "Showing published items only."
-    : "Showing all items (includes drafts/sold if your API returns them).";
+  statusEl.textContent = `${items.length} piece(s)`;
+  status2El.textContent =
+    filterEl.value === "available"
+      ? "Showing available pieces only."
+      : "Showing all items returned by the API.";
 
-  grid.innerHTML = items.map((item) => {
-    const title = item?.title || "Untitled";
-    const artist = item?.artist_name ? safe(item.artist_name) : "";
-    const year = item?.year ? safe(item.year) : "";
-    const metaLine = [artist, year].filter(Boolean).join(" • ");
+  grid.innerHTML = items
+    .map((item) => {
+      const title = item?.title || "Untitled";
+      const img = pickImageUrl(item);
+      const ex = excerpt(item);
 
-    const img = pickImageUrl(item);
-    const currency = item?.currency || "USD";
-    const priceCents = getPriceCents(item);
-    const priceText = priceCents ? formatMoney(priceCents, currency) : "";
+      const currency = item?.currency || "USD";
+      const priceCents = getPriceCents(item);
+      const priceText = priceCents ? formatMoney(priceCents, currency) : "";
 
-    const badgeSold = isSold(item) ? `<span class="badge sold">Sold</span>` : "";
-    const note = item?.availability_note ? `<span class="badge note">${safe(item.availability_note)}</span>` : "";
-    const shipping = item?.shipping_class ? `Shipping: ${safe(item.shipping_class)}` : "";
-    const dimText = dims(item);
-    const ex = excerpt(item);
+      const badgeSold = isSold(item) ? `<span class="badge sold">Sold</span>` : "";
+      const note = item?.availability_note ? `<span class="badge note">${safe(item.availability_note)}</span>` : "";
 
-    const canBuy = isPublished(item) && !isSold(item) && priceCents;
+      const canBuy = isPublished(item) && !isSold(item) && wantsWebsite(item) && priceCents;
 
-    return `
-      <article class="card">
-        <div class="media">
-          <div class="badges">
-            ${badgeSold}
-            ${note}
-          </div>
-          ${img
-            ? `<img src="${safe(img)}" alt="${safe(title)}">`
-            : `<div class="small">No image</div>`
-          }
-        </div>
-
-        <div class="content">
-          <div class="title">${safe(title)}</div>
-
-          ${metaLine ? `<div class="meta">${metaLine}</div>` : ``}
-          ${dimText ? `<div class="meta">${safe(dimText)}</div>` : ``}
-          ${shipping ? `<div class="meta">${shipping}</div>` : ``}
-          ${ex ? `<div class="meta">${safe(ex)}</div>` : ``}
-
-          <div class="priceRow">
-            <div class="price">${priceText || `<span class="small">Price on request</span>`}</div>
-            <div class="small">${channels(item).includes("Website") ? "Online" : ""}</div>
+      return `
+        <article class="card">
+          <div class="media">
+            <div class="badges">
+              ${badgeSold}
+              ${note}
+            </div>
+            ${
+              img
+                ? `<img src="${safe(img)}" alt="${safe(title)}" loading="lazy" />`
+                : `<div class="small">No image yet</div>`
+            }
           </div>
 
-          <div class="btnRow">
-            <button class="btn primary" data-buy="${safe(item?.slug || "")}" ${canBuy ? "" : "disabled"}>
-              ${canBuy ? "Buy with Stripe" : (isSold(item) ? "Sold" : "Unavailable")}
-            </button>
-          </div>
-        </div>
-      </article>
-    `;
-  }).join("");
+          <div class="content">
+            <div class="title">${safe(title)}</div>
 
-  // buy buttons
+            ${ex ? `<div class="meta">${safe(ex)}</div>` : ``}
+
+            <div class="priceRow">
+              <div class="price">${priceText || `<span class="small">Price on request</span>`}</div>
+              <div class="small">${wantsWebsite(item) ? "Online" : ""}</div>
+            </div>
+
+            <div class="btnRow">
+              <button class="btn primary" data-buy="${safe(item?.slug || "")}" ${canBuy ? "" : "disabled"}>
+                ${canBuy ? "Buy" : (isSold(item) ? "Sold" : "Unavailable")}
+              </button>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
   grid.querySelectorAll("button[data-buy]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const slug = btn.getAttribute("data-buy");
       if (!slug) return;
 
       if (!API_BASE) {
-        toast("Missing VITE_API_BASE on the storefront site.");
+        toast("Missing VITE_API_BASE on the storefront Netlify site.");
         return;
       }
 
       btn.disabled = true;
-      btn.textContent = "Creating checkout…";
+      const oldText = btn.textContent;
+      btn.textContent = "Starting checkout…";
 
       try {
-        // You will implement this endpoint on the API (steps below)
-        const res = await fetch(`${API_BASE}/api/checkout/create`, {
+        // Stripe gizmo endpoint (we’ll wire keys + handler soon)
+        const res = await fetch(`${API_BASE}/api/gizmos/stripe/public/create-checkout-session`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ slug }),
+          body: JSON.stringify({ slug }), // you can also pass { id } later if preferred
         });
 
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || `Checkout error (${res.status})`);
 
         if (data?.url) {
-          window.location.href = data.url; // Stripe hosted checkout
+          window.location.href = data.url;
         } else {
-          throw new Error("No checkout URL returned.");
+          throw new Error("No checkout URL returned yet (Stripe gizmo not fully configured).");
         }
       } catch (e) {
         console.error(e);
-        toast(e.message || "Checkout failed. Check API logs + CORS.");
+        toast(e.message || "Checkout failed. (Stripe not configured yet.)");
         btn.disabled = false;
-        btn.textContent = "Buy with Stripe";
+        btn.textContent = oldText;
       }
     });
   });
@@ -273,21 +274,21 @@ async function loadArt() {
   }
 
   statusEl.textContent = "Loading…";
+  status2El.textContent = "";
 
   try {
-    // IMPORTANT: adjust this endpoint if your API uses a different path for listing art.
-    // If your ServiceUp endpoint is /api/art (or /api/content/art), change it here.
-    const res = await fetch(`${API_BASE}/api/art`, { credentials: "include" });
+    // ✅ ServiceUp content endpoint (content type slug = art)
+    const res = await fetch(`${API_BASE}/api/content/art`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
 
-    const items = await res.json();
+    const items = await normalizeListResponse(res);
     ALL = Array.isArray(items) ? items : [];
 
     applyFilters();
   } catch (e) {
     console.error(e);
     statusEl.textContent = "Failed to load art.";
-    status2El.textContent = e.message || "Check API + CORS.";
+    status2El.textContent = e.message || "Check API + CORS + VITE_API_BASE.";
   }
 }
 
