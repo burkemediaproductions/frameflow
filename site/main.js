@@ -178,53 +178,38 @@ function render(items) {
       : "Showing all items returned by the API.";
 
   grid.innerHTML = items
-    .map((item) => {
-      const title = item?.title || "Untitled";
-      const img = pickImageUrl(item);
-      const ex = excerpt(item);
+        .map((item) => {
+      const normalized = item?.fields || item?.values || item?.data || item;
 
-      const currency = item?.currency || "USD";
-      const priceCents = getPriceCents(item);
+      const title = normalized?.title || normalized?._title || item?.title || "Untitled";
+      const img =
+        normalized?.primary_image?.publicUrl ||
+        normalized?.primary_image?.public_url ||
+        normalized?.primary_image?.url ||
+        item?.primary_image?.publicUrl ||
+        item?.primary_image?.url ||
+        "";
+
+      const currency = normalized?.currency || item?.currency || "USD";
+
+      const cents =
+        typeof normalized?.price_cents === "number" ? normalized.price_cents :
+        typeof item?.price_cents === "number" ? item.price_cents :
+        null;
+
+      const priceCents = (cents && cents > 0) ? cents : parsePriceStringToCents(normalized?.price ?? item?.price);
       const priceText = priceCents ? formatMoney(priceCents, currency) : "";
 
-      const badgeSold = isSold(item) ? `<span class="badge sold">Sold</span>` : "";
-      const note = item?.availability_note ? `<span class="badge note">${safe(item.availability_note)}</span>` : "";
+      const status = String(normalized?.status ?? item?.status ?? "").toLowerCase();
+      const channelArr = Array.isArray(normalized?.channel) ? normalized.channel : (Array.isArray(item?.channel) ? item.channel : []);
+      const canBuy = status === "published" && status !== "sold" && channelArr.includes("Website") && !!priceCents;
 
-      const canBuy = isPublished(item) && !isSold(item) && wantsWebsite(item) && priceCents;
+      const badgeSold = status === "sold" ? `<span class="badge sold">Sold</span>` : "";
+      const noteSrc = normalized?.availability_note ?? item?.availability_note;
+      const note = noteSrc ? `<span class="badge note">${safe(noteSrc)}</span>` : "";
 
-      return `
-        <article class="card">
-          <div class="media">
-            <div class="badges">
-              ${badgeSold}
-              ${note}
-            </div>
-            ${
-              img
-                ? `<img src="${safe(img)}" alt="${safe(title)}" loading="lazy" />`
-                : `<div class="small">No image yet</div>`
-            }
-          </div>
-
-          <div class="content">
-            <div class="title">${safe(title)}</div>
-
-            ${ex ? `<div class="meta">${safe(ex)}</div>` : ``}
-
-            <div class="priceRow">
-              <div class="price">${priceText || `<span class="small">Price on request</span>`}</div>
-              <div class="small">${wantsWebsite(item) ? "Online" : ""}</div>
-            </div>
-
-            <div class="btnRow">
-              <button class="btn primary" data-buy="${safe(item?.slug || "")}" ${canBuy ? "" : "disabled"}>
-                ${canBuy ? "Buy" : (isSold(item) ? "Sold" : "Unavailable")}
-              </button>
-            </div>
-          </div>
-        </article>
-      `;
-    })
+      const ex = excerpt(normalized);
+)
     .join("");
 
   grid.querySelectorAll("button[data-buy]").forEach((btn) => {
