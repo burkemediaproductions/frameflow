@@ -3,8 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>DCE Gallery</title>
-    <meta name="description" content="DCE Gallery — curated artwork for collectors." />
+    <meta id="meta-description" name="description" content="DCE Gallery — curated artwork for collectors." />
+
+    <!-- Canonical (JS updates this on detail pages) -->
+    <link id="canonical" rel="canonical" href="/" />
+
+    <!-- Open Graph -->
+    <meta id="og-title" property="og:title" content="DCE Gallery" />
+    <meta id="og-description" property="og:description" content="Curated artwork for collectors." />
+    <meta id="og-type" property="og:type" content="website" />
+    <meta id="og-url" property="og:url" content="/" />
+    <meta id="og-image" property="og:image" content="" />
+
+    <!-- Twitter -->
+    <meta id="tw-card" name="twitter:card" content="summary_large_image" />
+    <meta id="tw-title" name="twitter:title" content="DCE Gallery" />
+    <meta id="tw-description" name="twitter:description" content="Curated artwork for collectors." />
+    <meta id="tw-image" name="twitter:image" content="" />
+
+    <!-- JSON-LD (JS writes Product schema on detail pages) -->
+    <script id="jsonld" type="application/ld+json">{}</script>
 
     <!-- Optional: nice modern font without adding a build dependency -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -17,6 +37,7 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
     <div id="app"></div>
     <script type="module" src="/main.js"></script>
   </body>
