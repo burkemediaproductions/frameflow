@@ -277,7 +277,7 @@ async function loadArt() {
   try {
     // IMPORTANT: adjust this endpoint if your API uses a different path for listing art.
     // If your ServiceUp endpoint is /api/art (or /api/content/art), change it here.
-    const res = await fetch(`${API_BASE}/api/artworks`, { credentials: "include" });
+    const res = await fetch(`${API_BASE}/api/art`, { credentials: "include" });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
 
     const items = await res.json();
