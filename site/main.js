@@ -156,8 +156,9 @@ function applyFilters() {
 
   // Default: only show published, not sold, and intended for Website channel
   if (mode === "available") {
-    items = items.filter((x) => isPublished(x) && !isSold(x) && wantsWebsite(x));
-  }
+  items = items.filter((x) => !isSold(x));
+}
+
 
   if (q) {
     items = items.filter((item) => {
