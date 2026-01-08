@@ -168,28 +168,6 @@ function summarizeArray(arr) {
   return `${len} items`;
 }
 
-// ---------------------------------------------
-// ✅ NEW: resolved display helpers
-// ---------------------------------------------
-function summarizeResolved(obj) {
-  if (!obj || typeof obj !== 'object') return '';
-  return obj.title || obj.name || obj.label || obj.slug || obj.email || obj.id || '';
-}
-
-function resolveFromMap(rawValue, map) {
-  if (!rawValue) return '';
-  if (!map) return '';
-
-  if (Array.isArray(rawValue)) {
-    return rawValue
-      .map((id) => summarizeResolved(map[id]) || String(id))
-      .filter(Boolean)
-      .join(', ');
-  }
-
-  return summarizeResolved(map[rawValue]) || String(rawValue);
-}
-
 export default function TypeList() {
   const navigate = useNavigate();
   const { type: typeSlugParam, typeSlug: typeSlugAlt } = useParams();
@@ -492,24 +470,8 @@ export default function TypeList() {
 
     if (value === null || typeof value === 'undefined') return '';
 
-    // ✅ NEW: resolved user + resolved entry labels (beats UUIDs)
-    // User fields: _resolved.userFields + _resolved.usersById
-    const isResolvedUserField = !!row?._resolved?.userFields?.[key];
-    if (isResolvedUserField && (typeof value === 'string' || Array.isArray(value))) {
-      const label = resolveFromMap(value, row?._resolved?.usersById);
-      if (label && label !== String(value)) return label;
-      if (label) return label; // even if it equals, still ok
-    }
-
-    // Relationship fields: _resolved.entryFields + _resolved.entriesById
-    // (This will start working as soon as the backend adds attachResolvedEntriesToEntries)
-    const isResolvedEntryField = !!row?._resolved?.entryFields?.[key];
-    if (isResolvedEntryField && (typeof value === 'string' || Array.isArray(value))) {
-      const label = resolveFromMap(value, row?._resolved?.entriesById);
-      if (label) return label;
-    }
-
-    // ✅ If this key maps to an actual field definition, use canonical formatter
+    // ✅ NEW: If this key maps to an actual field definition, use the canonical
+    // formatter (repeaters, nested repeaters, relations, etc.) for list/widget display.
     if (Array.isArray(contentType?.fields)) {
       const fieldDef =
         contentType.fields.find((f) => (f?.field_key || f?.key) === key) || null;
