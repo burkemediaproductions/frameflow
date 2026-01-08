@@ -315,45 +315,36 @@ function App() {
           />
 
           {/* Gizmos routes */}
-        <Route
-  path="/admin/gizmos"
-  element={
-    <RequireAuth>
-      <AdminLayout>
-        <GizmosList />
-      </AdminLayout>
-    </RequireAuth>
-  }
-/>
-
-{/* ✅ allow trailing slash */}
-<Route
-  path="/admin/gizmos/"
-  element={<Navigate to="/admin/gizmos" replace />}
-/>
-
-<Route
-  path="/admin/gizmos/new"
-  element={
-    <RequireAuth>
-      <AdminLayout>
-        <GizmoForm />
-      </AdminLayout>
-    </RequireAuth>
-  }
-/>
-
-<Route
-  path="/admin/gizmos/:id"
-  element={
-    <RequireAuth>
-      <AdminLayout>
-        <GizmoForm />
-      </AdminLayout>
-    </RequireAuth>
-  }
-/>
-
+          <Route
+            path="/admin/gizmos"
+            element={
+              <RequireAuth>
+                <AdminLayout>
+                  <GizmosList />
+                </AdminLayout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/gizmos/new"
+            element={
+              <RequireAuth>
+                <AdminLayout>
+                  <GizmoForm />
+                </AdminLayout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/gizmos/:id"
+            element={
+              <RequireAuth>
+                <AdminLayout>
+                  <GizmoForm />
+                </AdminLayout>
+              </RequireAuth>
+            }
+          />
 
           {/* Gadgets routes */}
           <Route
