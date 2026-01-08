@@ -11,15 +11,6 @@ const safe = (s) =>
     "'": "&#39;",
   }[m]));
 
-const isPublished = (item) => String(item?.status || "").toLowerCase() === "published";
-const isSold = (item) => String(item?.status || "").toLowerCase() === "sold";
-
-const pickImageUrl = (item) =>
-  item?.primary_image?.publicUrl ||
-  item?.primary_image?.public_url ||
-  item?.primary_image?.url ||
-  "";
-
 const tiptapToText = (node) => {
   if (!node) return "";
   if (node.type === "text") return node.text || "";
@@ -49,14 +40,41 @@ const parsePriceStringToCents = (raw) => {
   return Math.round(numeric * 100);
 };
 
-const getPriceCents = (item) => {
-  const cents = item?.price_cents;
-  if (typeof cents === "number" && Number.isFinite(cents) && cents > 0) return cents;
-  return parsePriceStringToCents(item?.price);
+// Normalize list items that may come back as { fields: {...} } or { data: {...} } etc.
+const normalizeItem = (item) => item?.fields || item?.values || item?.data || item || {};
+
+const getStatus = (n) => String(n?._status ?? n?.status ?? "").toLowerCase();
+const isPublished = (n) => getStatus(n) === "published";
+const isSold = (n) => getStatus(n) === "sold";
+
+const getChannels = (n) => (Array.isArray(n?.channel) ? n.channel : []);
+const wantsWebsite = (n) => getChannels(n).includes("Website");
+
+const pickImageUrl = (n) =>
+  n?.primary_image?.publicUrl ||
+  n?.primary_image?.public_url ||
+  n?.primary_image?.url ||
+  n?.primary_image_url ||
+  n?.image_url ||
+  "";
+
+const getPriceCents = (n) => {
+  if (typeof n?.price_cents === "number" && Number.isFinite(n.price_cents) && n.price_cents > 0) {
+    return n.price_cents;
+  }
+  return parsePriceStringToCents(n?.price);
 };
 
-const channels = (item) => (Array.isArray(item?.channel) ? item.channel : []);
-const wantsWebsite = (item) => channels(item).includes("Website");
+const normalizeListResponse = async (res) => {
+  const json = await res.json();
+  if (Array.isArray(json)) return json;
+  if (Array.isArray(json.items)) return json.items;
+  if (Array.isArray(json.data)) return json.data;
+  if (Array.isArray(json.rows)) return json.rows;
+  // some APIs do { data: { items: [] } }
+  if (Array.isArray(json?.data?.items)) return json.data.items;
+  return [];
+};
 
 // ---------- UI ----------
 const app = document.querySelector("#app");
@@ -139,30 +157,25 @@ const toast = (msg) => {
   toastEl._t = window.setTimeout(() => toastEl.classList.remove("show"), 4200);
 };
 
-const normalizeListResponse = async (res) => {
-  const json = await res.json();
-  if (Array.isArray(json)) return json;
-  if (Array.isArray(json.items)) return json.items;
-  if (Array.isArray(json.data)) return json.data;
-  if (Array.isArray(json.rows)) return json.rows;
-  return [];
-};
-
 function applyFilters() {
   const q = (searchEl.value || "").trim().toLowerCase();
   const mode = filterEl.value;
 
   let items = [...ALL];
 
-  // Default: only show published, not sold, and intended for Website channel
+  // Default: show published + not sold + Website channel + has a price
   if (mode === "available") {
-  items = items.filter((x) => !isSold(x));
-}
-
+    items = items.filter((x) => {
+      const n = normalizeItem(x);
+      const priceCents = getPriceCents(n);
+      return isPublished(n) && !isSold(n) && wantsWebsite(n) && !!priceCents;
+    });
+  }
 
   if (q) {
-    items = items.filter((item) => {
-      const hay = [item?.title, item?.slug].join(" ").toLowerCase();
+    items = items.filter((x) => {
+      const n = normalizeItem(x);
+      const hay = [n?.title, n?._title, n?.slug, n?._slug].join(" ").toLowerCase();
       return hay.includes(q);
     });
   }
@@ -178,38 +191,57 @@ function render(items) {
       : "Showing all items returned by the API.";
 
   grid.innerHTML = items
-        .map((item) => {
-      const normalized = item?.fields || item?.values || item?.data || item;
+    .map((raw) => {
+      const n = normalizeItem(raw);
 
-      const title = normalized?.title || normalized?._title || item?.title || "Untitled";
-      const img =
-        normalized?.primary_image?.publicUrl ||
-        normalized?.primary_image?.public_url ||
-        normalized?.primary_image?.url ||
-        item?.primary_image?.publicUrl ||
-        item?.primary_image?.url ||
-        "";
+      const title = n?.title || n?._title || "Untitled";
+      const slug = n?.slug || n?._slug || "";
+      const img = pickImageUrl(n);
 
-      const currency = normalized?.currency || item?.currency || "USD";
-
-      const cents =
-        typeof normalized?.price_cents === "number" ? normalized.price_cents :
-        typeof item?.price_cents === "number" ? item.price_cents :
-        null;
-
-      const priceCents = (cents && cents > 0) ? cents : parsePriceStringToCents(normalized?.price ?? item?.price);
+      const currency = n?.currency || "USD";
+      const priceCents = getPriceCents(n);
       const priceText = priceCents ? formatMoney(priceCents, currency) : "";
 
-      const status = String(normalized?.status ?? item?.status ?? "").toLowerCase();
-      const channelArr = Array.isArray(normalized?.channel) ? normalized.channel : (Array.isArray(item?.channel) ? item.channel : []);
-      const canBuy = status === "published" && status !== "sold" && channelArr.includes("Website") && !!priceCents;
+      const ex = excerpt(n);
 
-      const badgeSold = status === "sold" ? `<span class="badge sold">Sold</span>` : "";
-      const noteSrc = normalized?.availability_note ?? item?.availability_note;
-      const note = noteSrc ? `<span class="badge note">${safe(noteSrc)}</span>` : "";
+      const badgeSold = isSold(n) ? `<span class="badge sold">Sold</span>` : "";
+      const note = n?.availability_note ? `<span class="badge note">${safe(n.availability_note)}</span>` : "";
 
-      const ex = excerpt(normalized);
-)
+      const canBuy = isPublished(n) && !isSold(n) && wantsWebsite(n) && !!priceCents;
+
+      return `
+        <article class="card">
+          <div class="media">
+            <div class="badges">
+              ${badgeSold}
+              ${note}
+            </div>
+            ${
+              img
+                ? `<img src="${safe(img)}" alt="${safe(title)}" loading="lazy" />`
+                : `<div class="small">No image yet</div>`
+            }
+          </div>
+
+          <div class="content">
+            <div class="title">${safe(title)}</div>
+
+            ${ex ? `<div class="meta">${safe(ex)}</div>` : ``}
+
+            <div class="priceRow">
+              <div class="price">${priceText || `<span class="small">Price on request</span>`}</div>
+              <div class="small">${wantsWebsite(n) ? "Online" : ""}</div>
+            </div>
+
+            <div class="btnRow">
+              <button class="btn primary" data-buy="${safe(slug)}" ${canBuy ? "" : "disabled"}>
+                ${canBuy ? "Buy" : (isSold(n) ? "Sold" : "Unavailable")}
+              </button>
+            </div>
+          </div>
+        </article>
+      `;
+    })
     .join("");
 
   grid.querySelectorAll("button[data-buy]").forEach((btn) => {
@@ -227,11 +259,10 @@ function render(items) {
       btn.textContent = "Starting checkout…";
 
       try {
-        // Stripe gizmo endpoint (we’ll wire keys + handler soon)
         const res = await fetch(`${API_BASE}/api/gizmos/stripe/public/create-checkout-session`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slug }), // you can also pass { id } later if preferred
+          body: JSON.stringify({ slug }),
         });
 
         const data = await res.json().catch(() => ({}));
@@ -263,7 +294,6 @@ async function loadArt() {
   status2El.textContent = "";
 
   try {
-    // ✅ ServiceUp content endpoint (content type slug = art)
     const res = await fetch(`${API_BASE}/api/content/art`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
 
