@@ -195,7 +195,7 @@ img{ display: block; }
 
   .nav{
     padding: 10px 0;
-    gap: 10px;
+    gap: 8px;
 
     /* 2 rows:
        Row 1: logo (+ tagline under it)
@@ -219,7 +219,7 @@ img{ display: block; }
     display: flex;
     flex-direction: column; /* tagline below logo */
     align-items: flex-start;
-    gap: 6px;
+    gap: 0;
     min-width: 0;
   }
 
@@ -235,13 +235,7 @@ img{ display: block; }
     object-fit: contain;
   }
 
-  .brand-tagline{
-    display: block;
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.2;
-    color: rgba(0,0,0,0.60);
-  }
+  .brand-tagline { display: none !important; }
 
   /* Search should be full width and not collapse */
   .search{
