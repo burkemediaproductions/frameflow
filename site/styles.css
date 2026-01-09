@@ -86,6 +86,7 @@ img{ display: block; }
   color: rgba(0,0,0,0.6);
   letter-spacing: 0.3px;
   white-space: nowrap;
+  display:none;
 }
 
 .header-left{
