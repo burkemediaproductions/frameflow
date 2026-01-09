@@ -113,16 +113,21 @@ const app = document.querySelector("#app");
 app.innerHTML = `
   <header class="header">
     <div class="container nav">
-        <a class="brandLink" href="#/" aria-label="DCE Gallery home">
-          <div class="logo" aria-label="DCE Gallery logo">
-            ${LOGO_URL
-              ? `<img src="${LOGO_URL}" alt="DCE Gallery" loading="lazy" decoding="async" />`
-              : `<span class="logoText" aria-hidden="true">DCE</span>`}
-          </div>
-          <div class="brandText">
-            <div class="brandName">DCE Gallery</div>
-            <div class="brandTag">Curated pieces for collectors</div>
-        </a>
+        <a class="brand" href="/" aria-label="DCE Gallery home">
+        <img
+          class="brand-logo"
+          src="https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png"
+        alt="DCE Gallery"
+        width="220"
+        height="64"
+        decoding="async"
+        loading="eager"
+          />
+  <span class="sr-only">DCE Gallery</span>
+</a>
+
+<div class="brand-tagline">Curated pieces for collectors</div>
+
       </div>
 
       <div class="actions">
