@@ -113,7 +113,6 @@ const app = document.querySelector("#app");
 app.innerHTML = `
   <header class="header">
     <div class="container nav">
-      <div class="brand">
         <a class="brandLink" href="#/" aria-label="DCE Gallery home">
           <div class="logo" aria-label="DCE Gallery logo">
             ${LOGO_URL
@@ -123,7 +122,6 @@ app.innerHTML = `
           <div class="brandText">
             <div class="brandName">DCE Gallery</div>
             <div class="brandTag">Curated pieces for collectors</div>
-          </div>
         </a>
       </div>
 
