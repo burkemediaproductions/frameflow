@@ -190,33 +190,47 @@ img{ display: block; }
 /* Mobile Styles for Header */
 @media (max-width: 640px){
 
+  /* Header layout: logo + filter on top row, search full width under */
   .nav{
     display: grid;
     grid-template-columns: 1fr auto;
     grid-template-areas:
-      "search filter"
-      "logo   logo";
+      "logo  filter"
+      "search search";
     gap: 10px;
     padding: 10px 0;
+    align-items: center;
+  }
+
+  .brand{
+    grid-area: logo;
+    justify-self: start;
+    min-width: 0;
+  }
+
+  .brand-logo{
+    height: 82px; /* bigger on mobile */
+    width: auto;
+    max-width: 220px; /* prevent overflow */
+    object-fit: contain;
+  }
+
+  .pill{
+    grid-area: filter;
+    width: auto;
+    min-width: 140px;
+    justify-self: end;
   }
 
   .searchWrap{
     grid-area: search;
     width: 100%;
+    min-width: 0;
   }
 
-  .pill{
-    grid-area: filter;
+  .search{
     width: 100%;
-  }
-
-  .brand{
-    grid-area: logo;
-    justify-self: center;
-  }
-
-  .brand-logo{
-    height: 84px; /* slightly larger on mobile */
+    min-width: 0;
   }
 }
 
