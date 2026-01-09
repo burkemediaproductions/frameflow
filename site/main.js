@@ -2,7 +2,7 @@ const API_BASE = import.meta.env.VITE_API_BASE;
 
 const LOGO_URL =
   import.meta.env.VITE_LOGO_URL ||
-  "https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png";
+  "https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767926048166.png";
 
 // ---------- helpers ----------
 const safe = (s) => (typeof s === "string" ? s : "");
