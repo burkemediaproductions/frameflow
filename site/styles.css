@@ -71,6 +71,102 @@ img{ display: block; }
   min-width: 240px;
 }
 
+
+/* -----------------------------
+   Mobile header tightening
+------------------------------ */
+
+@media (max-width: 640px){
+
+  /* container padding tighter */
+  .container{
+    width: min(var(--container), calc(100% - 24px));
+  }
+
+  /* less vertical padding */
+  .nav{
+    padding: 10px 0;
+    gap: 10px;
+  }
+
+  /* turn header into 2-row layout:
+     Row 1: brand + filter
+     Row 2: search (full width)
+  */
+  .nav{
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "brand actions"
+      "search search";
+    align-items: center;
+  }
+
+  .header-left{ grid-area: brand; }
+  .actions{ grid-area: actions; }
+  .searchWrap{ grid-area: search; }
+
+  /* logo + tagline should be compact and aligned */
+  .header-left{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0; /* allows text to shrink properly */
+  }
+
+  /* bigger logo, but not blowing up the header */
+  .brand-logo{
+    height: 56px;      /* adjust 52–64 if you want */
+    max-width: 160px;  /* keeps it from pushing everything */
+  }
+
+  /* keep tagline on one line if possible */
+  .brand-tagline{
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px; /* keeps it from colliding */
+    margin: 0;
+  }
+
+  /* actions (filter) should not create big whitespace */
+  .actions{
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  /* search full width and a bit shorter */
+  .searchWrap{
+    width: 100%;
+  }
+  .search{
+    padding: 10px 12px;
+  }
+
+  /* dropdown pill tighter */
+  .pill{
+    padding: 10px 12px;
+  }
+
+  /* hero spacing tighter too */
+  .hero{
+    padding: 10px 0 6px;
+  }
+
+  .heroCard{
+    padding: 12px 12px;
+    border-radius: 16px;
+  }
+
+  /* cards/grid tighter */
+  .grid{
+    gap: 14px;
+    padding: 14px 0 22px;
+  }
+}
+
 .brand-logo{
   height: 88px;          /* increase this for bigger logo */
   width: auto;
@@ -522,3 +618,4 @@ body::after {
   90%  { transform: translate(1%, -1%); }
   100% { transform: translate(0, 0); }
 }
+
