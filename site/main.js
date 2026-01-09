@@ -1,469 +1,396 @@
-const API_BASE = import.meta.env.VITE_API_BASE;
+/* DCE Gallery – minimal Vite storefront (static) */
 
-const LOGO_URL =
-  import.meta.env.VITE_LOGO_URL ||
-  "https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767926048166.png";
+const API_BASE =
+  (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) ||
+  window.__API_BASE__ ||
+  "https://frameflow-i677.onrender.com";
 
-// ---------- helpers ----------
-const safe = (s) => (typeof s === "string" ? s : "");
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+// Logo (for now hard-coded; later we can fetch from /public/widgets or settings)
+const DEFAULT_LOGO_URL =
+  "https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png";
+const LOGO_URL = DEFAULT_LOGO_URL;
 
-function formatUSDFromCents(cents) {
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return null;
-  // Your data uses price_cents=3333 but you want $33.33, so treat as cents.
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(n / 100);
-}
+const APP_NAME = "DCE Gallery";
+const TAGLINE = "Curated pieces for collectors";
 
-function toPlainTextFromTiptap(doc) {
+const fmtMoney = (cents, currency = "USD") => {
+  if (typeof cents !== "number" || Number.isNaN(cents)) return null;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(cents / 100);
+  } catch {
+    return `$${(cents / 100).toFixed(2)}`;
+  }
+};
+
+function textFromTiptap(doc) {
   try {
     if (!doc || typeof doc !== "object") return "";
-    const out = [];
+    const chunks = [];
     const walk = (node) => {
       if (!node) return;
-      if (node.type === "text" && typeof node.text === "string") out.push(node.text);
+      if (node.type === "text" && typeof node.text === "string") chunks.push(node.text);
       if (Array.isArray(node.content)) node.content.forEach(walk);
     };
     walk(doc);
-    return out.join("").replace(/\s+/g, " ").trim();
+    return chunks.join("").replace(/\s+/g, " ").trim();
   } catch {
     return "";
   }
 }
 
-function slugify(s) {
-  return safe(s)
+function slugify(str) {
+  return String(str || "")
     .toLowerCase()
     .trim()
-    .replace(/[“”"]/g, "")
+    .replace(/["'“”‘’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+    .replace(/^-+|-+$/g, "");
 }
 
-function normalizeItem(raw) {
-  // ServiceUp returns content rows with a "data" object or can return flattened fields.
-  const data = raw?.data && typeof raw.data === "object" ? raw.data : raw || {};
-  return {
-    ...data,
-    // some installs include these at root
-    _id: raw?.id || data?.id,
-    _created_at: raw?.created_at || data?.created_at,
-  };
-}
-
-function getPublicUrlFromImageField(img) {
-  if (!img) return null;
-  // Your image field has .publicUrl (from Supabase storage)
-  if (typeof img === "string") return img;
-  if (typeof img === "object") {
-    return img.publicUrl || img.url || img.src || null;
-  }
-  return null;
-}
-
-function isAvailable(item) {
-  // you can change this later once you add a true inventory / availability field
-  const status = safe(item?.status || item?._status).toLowerCase();
-  if (status && status !== "published") return false;
-  // If channel includes Website, consider it “available” by default
-  const ch = item?.channel;
-  if (Array.isArray(ch) && ch.length) return ch.includes("Website");
-  return true;
-}
-
-// ---------- API ----------
 async function fetchJSON(url) {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${res.statusText}: ${t.slice(0, 120)}`);
-  }
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 
-async function fetchArtList() {
-  // ServiceUp content endpoint is: /api/content/:slug
-  // Your content type slug is "art"
-  const url = `${API_BASE.replace(/\/$/, "")}/api/content/art`;
-  const data = await fetchJSON(url);
+function setMeta({ title, description, canonical, ogImage } = {}) {
+  const t = title || APP_NAME;
+  const d = description || `${APP_NAME} — curated artwork for collectors.`;
+  document.title = t;
 
-  // Support a few shapes:
-  // - { items: [...] }
-  // - { data: [...] }
-  // - [...]
-  const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : [];
+  const metaDesc = document.querySelector("#meta-description");
+  if (metaDesc) metaDesc.setAttribute("content", d);
+
+  const canon = document.querySelector("#canonical");
+  if (canon && canonical) canon.setAttribute("href", canonical);
+
+  const ogTitle = document.querySelector("#og-title");
+  const ogDesc = document.querySelector("#og-description");
+  const ogUrl = document.querySelector("#og-url");
+  const ogImg = document.querySelector("#og-image");
+  if (ogTitle) ogTitle.setAttribute("content", t);
+  if (ogDesc) ogDesc.setAttribute("content", d);
+  if (ogUrl && canonical) ogUrl.setAttribute("content", canonical);
+  if (ogImg && ogImage) ogImg.setAttribute("content", ogImage);
+
+  const twTitle = document.querySelector("#tw-title");
+  const twDesc = document.querySelector("#tw-description");
+  const twImg = document.querySelector("#tw-image");
+  if (twTitle) twTitle.setAttribute("content", t);
+  if (twDesc) twDesc.setAttribute("content", d);
+  if (twImg && ogImage) twImg.setAttribute("content", ogImage);
+
+  // Basic JSON-LD (CollectionPage or Product on detail)
+  const jsonld = document.querySelector("#jsonld");
+  if (jsonld) {
+    jsonld.textContent = JSON.stringify(
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: APP_NAME,
+        url: canonical || "/",
+      },
+      null,
+      0
+    );
+  }
+}
+
+function showToast(msg) {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add("show");
+  window.clearTimeout(showToast._t);
+  showToast._t = window.setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+function getRoute() {
+  const h = window.location.hash || "#/";
+  // #/piece/:slug
+  const parts = h.replace(/^#\/?/, "").split("/").filter(Boolean);
+  return parts;
+}
+
+function setRoute(hash) {
+  window.location.hash = hash;
+}
+
+function renderShell() {
+  const app = document.getElementById("app");
+  if (!app) return;
+
+  app.innerHTML = `
+    <div class="film-grain" aria-hidden="true"></div>
+
+    <header class="topbar" role="banner">
+      <div class="container nav">
+        <a class="brand" href="#/" aria-label="${APP_NAME} home">
+          <span class="sr-only">${APP_NAME}</span>
+          ${
+            LOGO_URL
+              ? `<img class="brand-logo" src="${LOGO_URL}" alt="${APP_NAME} logo" />`
+              : ""
+          }
+        </a>
+
+        <div class="tools" role="search" aria-label="Search and filters">
+          <label class="sr-only" for="search">Search</label>
+          <input id="search" class="search" type="search" placeholder="Search titles…" autocomplete="off" />
+
+          <label class="sr-only" for="filter">Availability</label>
+          <select id="filter" class="filter">
+            <option value="available">Available</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="hero" aria-label="Intro">
+        <h1>Artwork for collectors.</h1>
+        <p>${TAGLINE}</p>
+      </section>
+
+      <section class="panel" aria-label="Content">
+        <div id="status" class="status" aria-live="polite"></div>
+        <div id="view" class="view"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-row">
+          <span>© ${new Date().getFullYear()} ${APP_NAME}</span>
+        </div>
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  `;
+}
+
+function cardHTML(item) {
+  const title = item?.title || item?._title || "Untitled";
+  const slug = item?.slug || item?._slug || slugify(title);
+  const artist = item?.artist_name || "";
+  const year = item?.year || "";
+  const img = item?.primary_image?.publicUrl || "";
+  const desc = textFromTiptap(item?.description);
+  const price =
+    typeof item?.price_cents === "number"
+      ? fmtMoney(item.price_cents, item.currency || "USD")
+      : null;
+
+  const subtitle = [artist, year].filter(Boolean).join(" • ");
+  const snippet = desc ? desc.slice(0, 140) + (desc.length > 140 ? "…" : "") : "";
+
+  return `
+    <article class="card">
+      <a class="card-link" href="#/piece/${encodeURIComponent(slug)}" aria-label="View ${title}">
+        <div class="card-media">
+          ${
+            img
+              ? `<img src="${img}" alt="${title}" loading="lazy" decoding="async" />`
+              : `<div class="img-fallback" aria-hidden="true"></div>`
+          }
+        </div>
+
+        <div class="card-body">
+          <h2 class="card-title">${title}</h2>
+          ${subtitle ? `<div class="card-subtitle">${subtitle}</div>` : ""}
+          ${snippet ? `<p class="card-snippet">${snippet}</p>` : ""}
+          <div class="card-meta">
+            <span class="price">${price || "Price on request"}</span>
+            <span class="pill">Online</span>
+          </div>
+        </div>
+      </a>
+    </article>
+  `;
+}
+
+function detailHTML(item) {
+  const title = item?.title || item?._title || "Untitled";
+  const slug = item?.slug || item?._slug || slugify(title);
+  const artist = item?.artist_name || "";
+  const year = item?.year || "";
+  const medium = item?.medium || "";
+  const framed = typeof item?.framed === "boolean" ? (item.framed ? "Framed" : "Unframed") : "";
+  const dims = [item?.width_in, item?.height_in, item?.depth_in].filter((v) => typeof v === "number");
+  const dimsText = dims.length ? `${dims[0]} × ${dims[1]}${dims[2] ? ` × ${dims[2]}` : ""} in` : "";
+  const provenance = item?.provenance || "";
+  const img = item?.primary_image?.publicUrl || "";
+  const desc = textFromTiptap(item?.description);
+  const price =
+    typeof item?.price_cents === "number"
+      ? fmtMoney(item.price_cents, item.currency || "USD")
+      : null;
+
+  // SEO meta
+  setMeta({
+    title: `${title} — ${APP_NAME}`,
+    description: desc ? desc.slice(0, 160) : `${title} available at ${APP_NAME}.`,
+    canonical: `#/piece/${encodeURIComponent(slug)}`,
+    ogImage: img || "",
+  });
+
+  const facts = [
+    artist ? ["Artist", artist] : null,
+    year ? ["Year", year] : null,
+    medium ? ["Medium", medium] : null,
+    framed ? ["Framing", framed] : null,
+    dimsText ? ["Size", dimsText] : null,
+    provenance ? ["Provenance", provenance] : null,
+    item?.sku ? ["SKU", item.sku] : null,
+  ].filter(Boolean);
+
+  return `
+    <div class="detail">
+      <a class="back" href="#/">← Back to all artwork</a>
+
+      <div class="detail-grid">
+        <div class="detail-media">
+          ${
+            img
+              ? `<img src="${img}" alt="${title}" loading="eager" decoding="async" />`
+              : `<div class="img-fallback" aria-hidden="true"></div>`
+          }
+        </div>
+
+        <div class="detail-body">
+          <h1 class="detail-title">${title}</h1>
+          ${artist || year ? `<div class="detail-subtitle">${[artist, year].filter(Boolean).join(" • ")}</div>` : ""}
+
+          <div class="detail-price">${price || "Price on request"}</div>
+
+          ${
+            facts.length
+              ? `<dl class="facts">
+                  ${facts
+                    .map(
+                      ([k, v]) => `<div class="fact"><dt>${k}</dt><dd>${v}</dd></div>`
+                    )
+                    .join("")}
+                </dl>`
+              : ""
+          }
+
+          ${desc ? `<div class="detail-desc"><p>${desc}</p></div>` : ""}
+
+          <div class="detail-actions">
+            <button class="btn" type="button" id="buyBtn" disabled title="Stripe checkout will be enabled next">
+              Buy (coming soon)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function loadList() {
+  const status = document.getElementById("status");
+  const view = document.getElementById("view");
+  if (!status || !view) return;
+
+  status.textContent = "Loading artwork…";
+
+  const data = await fetchJSON(`${API_BASE}/api/content/art`);
+  // ServiceUp returns array or {items:[]}
+  const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+  status.textContent = items.length ? `${items.length} piece(s)` : "No artwork yet.";
   return items;
 }
 
-async function fetchArtBySlug(slug) {
-  // easiest: pull list and find by slug (small catalog)
-  const list = await fetchArtList();
-  const norm = list.map(normalizeItem);
-  const found = norm.find((x) => safe(x.slug || x._slug) === slug);
-  return found || null;
-}
+async function renderList(items) {
+  const view = document.getElementById("view");
+  if (!view) return;
 
-// ---------- UI ----------
-const app = document.querySelector("#app");
+  const searchEl = document.getElementById("search");
+  const filterEl = document.getElementById("filter");
 
-app.innerHTML = `
-  <header class="header">
-    <div class="container nav">
-        <a class="brand" href="/" aria-label="DCE Gallery home">
-        <img
-          class="brand-logo"
-          src="https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png"
-        alt="DCE Gallery"
-        width="220"
-        height="64"
-        decoding="async"
-        loading="eager"
-          />
-  <span class="sr-only">DCE Gallery</span>
-</a>
+  const apply = () => {
+    const q = (searchEl?.value || "").toLowerCase().trim();
+    const mode = filterEl?.value || "available";
 
-<div class="brand-tagline">Curated pieces for collectors</div>
+    const filtered = (items || []).filter((it) => {
+      const title = (it?.title || it?._title || "").toLowerCase();
+      const slug = (it?.slug || it?._slug || "").toLowerCase();
+      const artist = (it?.artist_name || "").toLowerCase();
+      const matchQ = !q || title.includes(q) || slug.includes(q) || artist.includes(q);
 
+      // availability: if you later add a real field, swap this logic
+      const isPublished = (it?.status || it?._status || "published") === "published";
+      const matchAvail = mode === "all" ? true : isPublished;
+
+      return matchQ && matchAvail;
+    });
+
+    view.innerHTML = `
+      <div class="grid">
+        ${filtered.map(cardHTML).join("")}
       </div>
-
-      <div class="actions">
-        <div class="searchWrap">
-          <input id="search" class="search" type="search" placeholder="Search titles…" aria-label="Search titles" />
-        </div>
-
-        <select id="filter" class="pill" aria-label="Filter">
-          <option value="available">Available</option>
-          <option value="all">All</option>
-        </select>
-      </div>
-    </div>
-  </header>
-
-  <main id="main" class="container">
-    <div id="view"></div>
-
-    <footer class="footer">
-      <div>© ${new Date().getFullYear()} DCE Gallery</div>
-    </footer>
-  </main>
-
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-`;
-
-const viewEl = document.querySelector("#view");
-const toastEl = document.querySelector("#toast");
-
-function toast(msg) {
-  toastEl.textContent = msg;
-  toastEl.classList.add("show");
-  window.clearTimeout(toastEl._t);
-  toastEl._t = window.setTimeout(() => toastEl.classList.remove("show"), 2600);
-}
-
-function setHeadMeta({ title, description, canonicalPath, image }) {
-  // minimal, but effective
-  document.title = title || "DCE Gallery";
-  const metaDesc = document.querySelector('meta[name="description"]');
-  if (metaDesc) metaDesc.setAttribute("content", description || "DCE Gallery — curated artwork for collectors.");
-
-  const url = new URL(window.location.href);
-  const canonical = url.origin + canonicalPath;
-
-  let link = document.querySelector('link[rel="canonical"]');
-  if (!link) {
-    link = document.createElement("link");
-    link.setAttribute("rel", "canonical");
-    document.head.appendChild(link);
-  }
-  link.setAttribute("href", canonical);
-
-  // OpenGraph / Twitter (optional, but nice)
-  const upsertMeta = (attr, key, content) => {
-    let m = document.querySelector(`meta[${attr}="${key}"]`);
-    if (!m) {
-      m = document.createElement("meta");
-      m.setAttribute(attr, key);
-      document.head.appendChild(m);
-    }
-    m.setAttribute("content", content || "");
+    `;
   };
 
-  upsertMeta("property", "og:title", title || "DCE Gallery");
-  upsertMeta("property", "og:description", description || "");
-  upsertMeta("property", "og:type", canonicalPath?.startsWith("/art/") ? "article" : "website");
-  upsertMeta("property", "og:url", canonical);
-  upsertMeta("property", "og:image", image || "");
-
-  upsertMeta("name", "twitter:card", "summary_large_image");
-  upsertMeta("name", "twitter:title", title || "DCE Gallery");
-  upsertMeta("name", "twitter:description", description || "");
-  upsertMeta("name", "twitter:image", image || "");
-
-  // JSON-LD (basic)
-  let jsonld = document.querySelector('script[type="application/ld+json"]');
-  if (!jsonld) {
-    jsonld = document.createElement("script");
-    jsonld.type = "application/ld+json";
-    document.head.appendChild(jsonld);
-  }
-
-  const schema =
-    canonicalPath?.startsWith("/art/")
-      ? {
-          "@context": "https://schema.org",
-          "@type": "Product",
-          name: title,
-          description,
-          image: image ? [image] : undefined,
-          brand: { "@type": "Brand", name: "DCE Gallery" },
-          url: canonical,
-        }
-      : {
-          "@context": "https://schema.org",
-          "@type": "WebSite",
-          name: "DCE Gallery",
-          url: canonical,
-          description: "Curated artwork for collectors.",
-        };
-
-  jsonld.textContent = JSON.stringify(schema);
-}
-
-function renderListView({ items = [] }) {
-  setHeadMeta({
-    title: "DCE Gallery — Curated Artwork",
-    description: "A small, curated selection of artwork. New pieces added regularly.",
-    canonicalPath: "/",
-    image: LOGO_URL || "",
-  });
-
-  viewEl.innerHTML = `
-    <section class="hero">
-      <div class="heroBg" aria-hidden="true"></div>
-
-      <div class="heroTop">
-        <div>
-          <h2>Artwork for collectors.</h2>
-          <p class="sub">A small, curated selection. New pieces added regularly.</p>
-        </div>
-      </div>
-
-      <div class="heroCard">
-        <div>
-          <div id="status" class="stat"></div>
-          <div id="status2" class="small"></div>
-        </div>
-        <div class="small muted">Ships from U.S. • Secure checkout</div>
-      </div>
-    </section>
-
-    <section>
-      <div id="grid" class="grid"></div>
-    </section>
-  `;
-
-  const statusEl = document.querySelector("#status");
-  const status2El = document.querySelector("#status2");
-  const grid = document.querySelector("#grid");
-  const searchEl = document.querySelector("#search");
-  const filterEl = document.querySelector("#filter");
-
-  function apply() {
-    const q = safe(searchEl.value).toLowerCase();
-    const showAvailable = filterEl.value === "available";
-
-    const filtered = items
-      .map(normalizeItem)
-      .filter((x) => {
-        const title = safe(x.title || x._title).toLowerCase();
-        const artist = safe(x.artist_name).toLowerCase();
-        const medium = safe(x.medium).toLowerCase();
-        const okSearch = !q || title.includes(q) || artist.includes(q) || medium.includes(q);
-        const okAvail = !showAvailable || isAvailable(x);
-        return okSearch && okAvail;
-      });
-
-    statusEl.textContent = `${filtered.length} piece(s)`;
-    status2El.textContent = showAvailable ? "Showing available pieces only." : "Showing all pieces.";
-
-    grid.innerHTML = filtered
-      .map((raw) => {
-        const n = normalizeItem(raw);
-
-        const title = n?.title || n?._title || "Untitled";
-        const slug = n?.slug || n?._slug || slugify(title);
-        const artist = n?.artist_name ? safe(n.artist_name) : "";
-        const year = n?.year ? safe(n.year) : "";
-
-        const img = getPublicUrlFromImageField(n?.primary_image);
-        const price = formatUSDFromCents(n?.price_cents);
-
-        const descText = toPlainTextFromTiptap(n?.description);
-        const excerpt = descText ? descText.slice(0, 140) + (descText.length > 140 ? "…" : "") : "A curated piece from our collection.";
-
-        return `
-          <article class="card">
-            <a class="cardLink" href="#/art/${encodeURIComponent(slug)}" aria-label="${safe(title)}">
-              <div class="imgWrap">
-                ${img ? `<img class="img" src="${img}" alt="${safe(title)}" loading="lazy" decoding="async" />` : `<div class="imgPh" aria-hidden="true"></div>`}
-              </div>
-
-              <div class="cardBody">
-                <h3 class="title">${safe(title)}</h3>
-
-                <div class="meta">
-                  ${artist ? `<span>${artist}</span>` : ""}
-                  ${artist && year ? `<span class="dot">•</span>` : ""}
-                  ${year ? `<span>${year}</span>` : ""}
-                </div>
-
-                <p class="excerpt">${safe(excerpt)}</p>
-
-                <div class="bottom">
-                  <div class="price">${price ? price : "<span class='muted'>Price on request</span>"}</div>
-                  <div class="pillSmall">${isAvailable(n) ? "Online" : "Unavailable"}</div>
-                </div>
-              </div>
-            </a>
-          </article>
-        `;
-      })
-      .join("");
-  }
-
-  searchEl.addEventListener("input", apply);
-  filterEl.addEventListener("change", apply);
-
+  searchEl?.addEventListener("input", apply);
+  filterEl?.addEventListener("change", apply);
   apply();
 }
 
-function renderDetailView(item, slug) {
-  const n = normalizeItem(item || {});
-  const title = n?.title || n?._title || "Artwork";
-  const img = getPublicUrlFromImageField(n?.primary_image);
-  const artist = safe(n?.artist_name);
-  const year = safe(n?.year);
-  const medium = safe(n?.medium);
-  const framed = typeof n?.framed === "boolean" ? (n.framed ? "Framed" : "Unframed") : "";
-  const dims =
-    [n?.width_in, n?.height_in, n?.depth_in]
-      .map((x) => (Number.isFinite(Number(x)) ? Number(x) : null))
-      .filter(Boolean)
-      .slice(0, 3)
-      .join(" × ") || "";
+async function renderDetailBySlug(items, slug) {
+  const view = document.getElementById("view");
+  if (!view) return;
 
-  const price = formatUSDFromCents(n?.price_cents);
-  const descText = toPlainTextFromTiptap(n?.description);
-  const description = descText || "A curated piece from our collection.";
+  const decoded = decodeURIComponent(slug || "");
+  const found =
+    (items || []).find((it) => (it?.slug || it?._slug) === decoded) ||
+    (items || []).find((it) => slugify(it?.title || it?._title) === decoded);
 
-  setHeadMeta({
-    title: `${title} — DCE Gallery`,
-    description: description.slice(0, 160),
-    canonicalPath: `/art/${encodeURIComponent(slug)}`,
-    image: img || LOGO_URL || "",
-  });
-
-  viewEl.innerHTML = `
-    <section class="detail">
-      <a class="back" href="#/">&larr; Back to all artwork</a>
-
-      <div class="detailGrid">
-        <div class="detailMedia">
-          ${img ? `<img class="detailImg" src="${img}" alt="${safe(title)}" />` : `<div class="detailPh"></div>`}
-        </div>
-
-        <div class="detailBody">
-          <h1 class="detailTitle">${safe(title)}</h1>
-
-          <div class="detailMeta">
-            ${artist ? `<span>${artist}</span>` : ""}
-            ${artist && year ? `<span class="dot">•</span>` : ""}
-            ${year ? `<span>${year}</span>` : ""}
-            ${(artist || year) && (medium || framed || dims) ? `<span class="dot">•</span>` : ""}
-            ${medium ? `<span>${medium}</span>` : ""}
-          </div>
-
-          ${(framed || dims) ? `<div class="detailMeta2">${[framed, dims ? `${dims} in` : ""].filter(Boolean).join(" • ")}</div>` : ""}
-
-          <div class="detailPriceRow">
-            <div class="detailPrice">${price ? price : "Price on request"}</div>
-            <div class="pillSmall">${isAvailable(n) ? "Online" : "Unavailable"}</div>
-          </div>
-
-          <div class="detailDesc">
-            <h2>About this piece</h2>
-            <p>${safe(description)}</p>
-          </div>
-
-          <div class="detailActions">
-            <button class="btn" id="buyBtn" ${isAvailable(n) ? "" : "disabled"}>${isAvailable(n) ? "Buy" : "Unavailable"}</button>
-            <button class="btnGhost" id="inquireBtn">Inquire</button>
-          </div>
-
-          <div class="detailFine muted">
-            Shipping class: ${safe(n?.shipping_class) || "Standard"} • ${safe(n?.availability_note) || "Contact us for availability and shipping details."}
-          </div>
-        </div>
-      </div>
-    </section>
-  `;
-
-  // placeholder until Stripe is wired
-  document.querySelector("#buyBtn")?.addEventListener("click", () => {
-    toast("Checkout coming next — Stripe is installed and ready for keys.");
-  });
-
-  document.querySelector("#inquireBtn")?.addEventListener("click", () => {
-    toast("Inquiry: add contact form next (or mailto).");
-  });
-}
-
-async function router() {
-  const hash = window.location.hash || "#/";
-  const m = hash.match(/^#\/art\/(.+)$/);
-
-  if (!API_BASE) {
-    viewEl.innerHTML = `<div class="empty"><h2>Missing VITE_API_BASE</h2><p class="sub">Set it in Netlify env vars for this site.</p></div>`;
+  if (!found) {
+    view.innerHTML = `<div class="empty"><a class="back" href="#/">← Back</a><p>That artwork wasn’t found.</p></div>`;
     return;
   }
 
-  try {
-    if (m) {
-      const slug = decodeURIComponent(m[1]);
-      viewEl.innerHTML = `<div class="empty"><h2>Loading…</h2><p class="sub">Fetching artwork details.</p></div>`;
-      const item = await fetchArtBySlug(slug);
-      if (!item) {
-        viewEl.innerHTML = `<div class="empty"><h2>Not found</h2><p class="sub">That artwork isn’t available.</p><p><a class="back" href="#/">&larr; Back</a></p></div>`;
-        return;
-      }
-      renderDetailView(item, slug);
-      return;
-    }
+  view.innerHTML = detailHTML(found);
 
-    viewEl.innerHTML = `
-      <div class="empty">
-        <h2>Loading…</h2>
-        <p class="sub">Fetching the latest pieces.</p>
-      </div>
-    `;
-
-    const items = await fetchArtList();
-    renderListView({ items });
-  } catch (e) {
-    viewEl.innerHTML = `
-      <div class="empty">
-        <h2>Couldn’t load artwork</h2>
-        <p class="sub">${safe(e?.message || e)}</p>
-        <button class="btn" id="retry">Retry</button>
-      </div>
-    `;
-    document.querySelector("#retry")?.addEventListener("click", router);
-  }
+  const buyBtn = document.getElementById("buyBtn");
+  buyBtn?.addEventListener("click", () => showToast("Checkout will be enabled next."));
 }
 
-window.addEventListener("hashchange", router);
-router();
+async function boot() {
+  renderShell();
+
+  // list load (cache for routing)
+  let items = [];
+  try {
+    items = (await loadList()) || [];
+  } catch (e) {
+    const status = document.getElementById("status");
+    if (status) status.textContent = "Could not load artwork.";
+    showToast(`Error loading content: ${e?.message || e}`);
+  }
+
+  const route = () => {
+    const parts = getRoute();
+    // Reset list meta by default
+    setMeta({ title: APP_NAME, description: `${APP_NAME} — curated artwork for collectors.`, canonical: "#/" });
+
+    if (parts[0] === "piece" && parts[1]) {
+      renderDetailBySlug(items, parts[1]);
+      return;
+    }
+    renderList(items);
+  };
+
+  window.addEventListener("hashchange", route);
+  route();
+}
+
+boot();
