@@ -72,9 +72,9 @@ img{ display: block; }
 }
 
 .brand-logo{
-  height: 64px;          /* increase this for bigger logo */
+  height: 88px;          /* increase this for bigger logo */
   width: auto;
-  max-width: 320px;      /* prevents it from taking over */
+  max-width: 420px;      /* prevents it from taking over */
   object-fit: contain;   /* NO CROP */
   display:block;
 }
@@ -87,12 +87,10 @@ img{ display: block; }
   letter-spacing: 0.2px;
 }
 
-/* If you want the tagline to sit under the logo nicely: */
 .header-left{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .actions{
