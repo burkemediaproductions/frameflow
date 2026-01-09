@@ -81,10 +81,10 @@ img{ display: block; }
 
 /* Optional tagline positioning */
 .brand-tagline{
-  margin-top: 2px;
-  font-size: 13px;
+  font-size: 14px;
   color: rgba(0,0,0,0.6);
-  letter-spacing: 0.2px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 .header-left{
