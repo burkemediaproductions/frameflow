@@ -505,9 +505,9 @@ body::after {
       transparent 2px
     );
 
-  opacity: 0.035; /* ← controls strength (try 0.02–0.05) */
+  opacity: 0.05; /* ← controls strength (try 0.02–0.05) */
 
-  animation: filmGrain 8s steps(10) infinite;
+  animation: filmGrain 6s steps(10) infinite;
 }
 
 /* Very slow, organic movement */
