@@ -178,8 +178,7 @@ app.innerHTML = `
           <div class="logo" aria-label="DCE Gallery logo">
             ${
               LOGO_URL
-                ? `<img src="${safe(LOGO_URL)}" alt="DCE Gallery">`
-                : `<span style="font-weight:900; letter-spacing:-0.2px;">DCE</span>`
+                ? `<img src="https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png" alt="DCE Gallery">`
             }
           </div>
           <div>
