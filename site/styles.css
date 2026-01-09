@@ -189,66 +189,34 @@ img{ display: block; }
 /* Mobile Styles for Header */
 @media (max-width: 640px){
 
-  .container{
-    width: min(var(--container), calc(100% - 24px));
-  }
-
   .nav{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 0;
-  gap: 14px;
-  }
-
-  /* Areas */
-  .header-left{ grid-area: brand; }
-  .searchWrap{ grid-area: search; width: 100%; min-width: 0; }
-  .actions{ grid-area: actions; }
-
-  /* Brand block (logo + tagline stacked) */
-  .header-left{
-    display: flex;
-    flex-direction: column; /* tagline below logo */
-    align-items: flex-start;
-    gap: 0;
-    min-width: 0;
-  }
-
-  .brand{
-    min-width: 0 !important; /* overrides desktop min-width */
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "search filter"
+      "logo   logo";
     gap: 10px;
+    padding: 10px 0;
   }
 
-  .brand-logo{
-    height: 84px;     /* bigger logo */
-    width: auto;
-    max-width: 220px; /* avoid pushing layout */
-    object-fit: contain;
-  }
-
-  .brand-tagline { display: none !important; }
-
-  /* Search should be full width and not collapse */
-  .search{
+  .searchWrap{
+    grid-area: search;
     width: 100%;
-    min-width: 0;
-    padding: 10px 12px;
-  }
-
-  /* Filter pill stays compact */
-  .actions{
-    justify-content: flex-end;
-    gap: 8px;
   }
 
   .pill{
-    padding: 10px 12px;
+    grid-area: filter;
+    width: 100%;
   }
 
-  /* tighten hero spacing slightly */
-  .hero{ padding: 10px 0 6px; }
-  .heroCard{ padding: 12px 12px; border-radius: 16px; }
+  .brand{
+    grid-area: logo;
+    justify-self: center;
+  }
+
+  .brand-logo{
+    height: 84px; /* slightly larger on mobile */
+  }
 }
 
 .stat{
