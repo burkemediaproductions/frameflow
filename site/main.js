@@ -113,21 +113,22 @@ const app = document.querySelector("#app");
 app.innerHTML = `
   <header class="header">
     <div class="container nav">
+
+      <div class="header-left">
         <a class="brand" href="/" aria-label="DCE Gallery home">
-        <img
-          class="brand-logo"
-          src="https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png"
-        alt="DCE Gallery"
-        width="220"
-        height="64"
-        decoding="async"
-        loading="eager"
+          <img
+            class="brand-logo"
+            src="https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png"
+            alt="DCE Gallery"
+            width="220"
+            height="64"
+            decoding="async"
+            loading="eager"
           />
-  <span class="sr-only">DCE Gallery</span>
-</a>
+          <span class="sr-only">DCE Gallery</span>
+        </a>
 
-<div class="brand-tagline">Curated pieces for collectors</div>
-
+        <div class="brand-tagline">Curated pieces for collectors</div>
       </div>
 
       <div class="actions">
@@ -140,6 +141,7 @@ app.innerHTML = `
           <option value="all">All</option>
         </select>
       </div>
+
     </div>
   </header>
 
