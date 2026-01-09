@@ -194,19 +194,11 @@ img{ display: block; }
   }
 
   .nav{
-    padding: 10px 0;
-    gap: 8px;
-
-    /* 2 rows:
-       Row 1: logo (+ tagline under it)
-       Row 2: search left, filter right
-    */
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "brand brand"
-      "search actions";
-    align-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  gap: 14px;
   }
 
   /* Areas */
@@ -229,7 +221,7 @@ img{ display: block; }
   }
 
   .brand-logo{
-    height: 64px;     /* bigger logo */
+    height: 84px;     /* bigger logo */
     width: auto;
     max-width: 220px; /* avoid pushing layout */
     object-fit: contain;
