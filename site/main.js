@@ -1,5 +1,8 @@
 const API_BASE = import.meta.env.VITE_API_BASE;
-const LOGO_URL = import.meta.env.VITE_LOGO_URL || "";
+const LOGO_URL =
+  import.meta.env.VITE_LOGO_URL ||
+  "https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png";
+
 
 // ---------- helpers ----------
 const safe = (s) =>
@@ -176,11 +179,18 @@ app.innerHTML = `
       <div class="brand">
         <a class="brandLink" href="#/" aria-label="DCE Gallery home">
           <div class="logo" aria-label="DCE Gallery logo">
-            ${
-              LOGO_URL
-                ? `<img src="https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767918829592.png" alt="DCE Gallery">`
-            }
-          </div>
+  ${
+    LOGO_URL
+      ? `<img 
+          src="${LOGO_URL}" 
+          alt="DCE Gallery logo" 
+          loading="eager"
+          decoding="async"
+        />`
+      : `<span style="font-weight:900; letter-spacing:-0.2px;">DCE</span>`
+  }
+</div>
+
           <div>
             <h1>DCE Gallery</h1>
             <p>Curated pieces for collectors</p>
