@@ -5,6 +5,15 @@ import { buildShippingOptions } from "./shipping.js";
 
 const router = express.Router();
 
+router.get("/public/__ping", (req, res) => {
+  res.json({
+    ok: true,
+    gizmo: "stripe",
+    ts: Date.now(),
+  });
+});
+
+
 /**
  * IMPORTANT:
  * - /webhook uses express.raw() so Stripe signature verification works.
