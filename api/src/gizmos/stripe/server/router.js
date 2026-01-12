@@ -1,3 +1,4 @@
+
 import express from "express";
 import Stripe from "stripe";
 import { buildShippingOptions } from "./shipping.js";
@@ -5,288 +6,318 @@ import { buildShippingOptions } from "./shipping.js";
 const router = express.Router();
 
 /**
- * Small helper: fetch with timeout
+ * IMPORTANT:
+ * - /webhook uses express.raw() so Stripe signature verification works.
+ * - All other routes use JSON (already handled in api/index.js).
  */
-async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(t);
-  }
+
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env var: ${name}`);
+  return v;
 }
 
-/**
- * Prefer env base, fallback to request host
- */
-function getApiBase(req) {
-  const env =
-    process.env.SERVICEUP_API_BASE ||
-    process.env.API_BASE ||
-    process.env.PUBLIC_API_BASE ||
-    "";
-
-  if (env && typeof env === "string") return env.replace(/\/+$/, "");
-
-  const proto =
-    (req.headers["x-forwarded-proto"] || "").toString().split(",")[0].trim() ||
-    (req.secure ? "https" : "http");
-
-  const host =
-    (req.headers["x-forwarded-host"] || "").toString().split(",")[0].trim() ||
-    req.headers.host;
-
-  return `${proto}://${host}`.replace(/\/+$/, "");
+function getPool(req) {
+  const pool = req.app?.locals?.pool;
+  if (!pool) throw new Error("DB pool not found on app.locals.pool");
+  return pool;
 }
 
-/**
- * Fetch published art list from public endpoint and find match by id/slug
- */
-async function getPublishedArtByIdOrSlug({ req, id, slug }) {
-  const base = getApiBase(req);
-  const url = `${base}/api/content/art?status=published`;
-
-  const res = await fetchWithTimeout(
-    url,
-    { method: "GET", headers: { Accept: "application/json" } },
-    Number(process.env.STRIPE_ART_FETCH_TIMEOUT_MS || 8000)
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(value || "").trim()
   );
+}
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Art fetch failed: ${res.status} ${res.statusText} (url=${url}) body=${text.slice(0, 300)}`
+async function lookupArtEntry(pool, entryIdOrSlug) {
+  const key = String(entryIdOrSlug || "").trim();
+  if (!key) return null;
+
+  if (isUuid(key)) {
+    const { rows } = await pool.query(
+      `
+      SELECT e.*, ct.slug AS type_slug
+        FROM entries e
+        JOIN content_types ct ON ct.id = e.content_type_id
+       WHERE e.id = $1
+         AND ct.slug = 'art'
+       LIMIT 1
+      `,
+      [key]
     );
+    return rows[0] || null;
   }
 
-  const items = await res.json();
-  const list = Array.isArray(items) ? items : items?.data || [];
-
-  const wantId = id ? String(id) : null;
-  const wantSlug = slug ? String(slug) : null;
-
-  const match = list.find((x) => {
-    const item = x?.data && typeof x.data === "object" ? { ...x, ...x.data } : x;
-    const itemId = item?.id ? String(item.id) : null;
-    const itemSlug = item?.slug || item?._slug ? String(item.slug || item._slug) : null;
-    return (wantId && itemId === wantId) || (wantSlug && itemSlug === wantSlug);
-  });
-
-  if (!match) return null;
-
-  return match?.data && typeof match.data === "object" ? { ...match.data, ...match } : match;
+  // slug lookup
+  const { rows } = await pool.query(
+    `
+    SELECT e.*, ct.slug AS type_slug
+      FROM entries e
+      JOIN content_types ct ON ct.id = e.content_type_id
+     WHERE e.slug = $1
+       AND ct.slug = 'art'
+     LIMIT 1
+    `,
+    [key]
+  );
+  return rows[0] || null;
 }
 
-function resolvePriceCents(art) {
-  const raw = art?.price_cents;
+function readPriceCents(entry) {
+  const data = entry?.data && typeof entry.data === "object" ? entry.data : {};
+  const raw =
+    data.price_cents ??
+    data.priceCents ??
+    data.price ??
+    data.amount_cents ??
+    data.amountCents;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
 
-  if (Number.isFinite(Number(raw))) {
-    const n = Number(raw);
-    if (n >= 10000) return Math.round(n); // likely cents
-    if (!art?.price) return Math.round(n);
+function readTitle(entry) {
+  return String(entry?.title || "").trim() || "Artwork";
+}
+
+function readImage(entry) {
+  const data = entry?.data && typeof entry.data === "object" ? entry.data : {};
+  const img =
+    data.image_url ||
+    data.imageUrl ||
+    data.primary_image ||
+    data.primaryImage ||
+    data.cover ||
+    null;
+
+  if (!img) return null;
+  if (typeof img === "string") return img;
+  if (typeof img === "object") {
+    return img.publicUrl || img.url || img.src || null;
   }
-
-  const p = String(art?.price || "").replace(/[^0-9.]/g, "").trim();
-  if (!p) return null;
-
-  const val = Number(p);
-  if (!Number.isFinite(val) || val <= 0) return null;
-  return Math.round(val * 100);
+  return null;
 }
 
-function getStripe() {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
-  if (!secretKey) throw new Error("Missing STRIPE_SECRET_KEY");
-  return new Stripe(secretKey, { apiVersion: "2024-06-20" });
+function readCurrency(entry) {
+  const data = entry?.data && typeof entry.data === "object" ? entry.data : {};
+  return String(data.currency || "usd").toLowerCase();
 }
 
-/* -------------------------
-   Webhook (raw body!)
--------------------------- */
-router.post(
-  "/webhook",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    if (!webhookSecret) return res.status(400).json({ error: "Missing STRIPE_WEBHOOK_SECRET" });
+function readShippingClass(entry) {
+  const data = entry?.data && typeof entry.data === "object" ? entry.data : {};
+  return String(data.shipping_class || data.shippingClass || "standard");
+}
 
-    let stripe;
-    try {
-      stripe = getStripe();
-    } catch (e) {
-      return res.status(500).json({ error: e.message || "Stripe misconfigured" });
-    }
+function readSoldFlag(entry) {
+  const data = entry?.data && typeof entry.data === "object" ? entry.data : {};
+  return !!(data.sold || data.is_sold || data.sold_at || data.soldAt);
+}
 
-    let event;
-    try {
-      const sig = req.headers["stripe-signature"];
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } catch (err) {
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
+function baseSiteUrl(req) {
+  // Prefer env SITE_URL / FRONTEND_URL if set; else derive from request origin.
+  const env =
+    process.env.SITE_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_SITE_URL ||
+    "";
+  if (env) return env.replace(/\/$/, "");
 
-    try {
-      if (event.type === "checkout.session.completed") {
-        const session = event.data.object;
-        console.log("[STRIPE] checkout.session.completed", {
-          id: session.id,
-          amount_total: session.amount_total,
-          currency: session.currency,
-          art_id: session?.metadata?.art_id,
-          art_slug: session?.metadata?.art_slug,
-          shipping_class: session?.metadata?.shipping_class,
-        });
+  const origin = req.headers.origin || "";
+  if (origin) return origin.replace(/\/$/, "");
 
-        // Next steps later:
-        // - mark art as sold
-        // - hide sold pieces automatically
-      }
+  // Fallback — should be set in env in production.
+  return "http://localhost:5173";
+}
 
-      return res.json({ received: true });
-    } catch (e) {
-      console.error("[STRIPE] webhook handler error", e);
-      return res.status(500).json({ error: "Webhook handler failed" });
-    }
-  }
-);
+function buildSuccessUrl(req) {
+  // Using hash routing on the frontend:
+  //   /#/success?session_id={CHECKOUT_SESSION_ID}
+  return `${baseSiteUrl(req)}/#/success?session_id={CHECKOUT_SESSION_ID}`;
+}
 
-/* -------------------------
-   JSON routes
--------------------------- */
-router.use(express.json());
-
-router.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    hasSecretKey: !!process.env.STRIPE_SECRET_KEY,
-    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
-    siteUrl: process.env.SITE_URL || null,
-    apiBase:
-      process.env.SERVICEUP_API_BASE ||
-      process.env.API_BASE ||
-      process.env.PUBLIC_API_BASE ||
-      null,
-  });
-});
+function buildCancelUrl(req) {
+  return `${baseSiteUrl(req)}/#/cancel`;
+}
 
 /**
- * GET /api/gizmos/stripe/public/session/:id
- * Used by the Success page to show receipt/status.
+ * PUBLIC: Create checkout session for a single art entry
+ * Body:
+ *  { entry: "<uuid|slug>" }
+ *
+ * Response:
+ *  { id, url }
+ */
+async function handleCreateCheckoutSession(req, res) {
+  try {
+    const stripeSecret = requireEnv("STRIPE_SECRET_KEY");
+    const stripe = new Stripe(stripeSecret, { apiVersion: "2024-06-20" });
+
+    const { entry } = req.body || {};
+    const pool = getPool(req);
+
+    const found = await lookupArtEntry(pool, entry);
+    if (!found) return res.status(404).json({ error: "Art not found" });
+
+    if (String(found.status || "").toLowerCase() !== "published") {
+      return res.status(400).json({ error: "This piece is not available." });
+    }
+    if (readSoldFlag(found)) {
+      return res.status(400).json({ error: "This piece has already been sold." });
+    }
+
+    const priceCents = readPriceCents(found);
+    if (!priceCents || priceCents < 50) {
+      return res.status(400).json({ error: "Invalid price on this entry." });
+    }
+
+    const title = readTitle(found);
+    const currency = readCurrency(found);
+    const image = readImage(found);
+    const shippingClass = readShippingClass(found);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency,
+            unit_amount: priceCents,
+            product_data: {
+              name: title,
+              images: image ? [image] : [],
+              metadata: {
+                entry_id: found.id,
+                entry_slug: found.slug,
+                content_type: "art",
+                shipping_class: shippingClass,
+              },
+            },
+          },
+        },
+      ],
+      shipping_address_collection: { allowed_countries: ["US"] }, // USA-only
+      shipping_options: buildShippingOptions({ shippingClass, currency }),
+      success_url: buildSuccessUrl(req),
+      cancel_url: buildCancelUrl(req),
+      automatic_tax: process.env.STRIPE_AUTOMATIC_TAX === "true" ? { enabled: true } : undefined,
+      metadata: {
+        entry_id: found.id,
+        entry_slug: found.slug,
+        entry_title: title,
+        content_type: "art",
+        shipping_class: shippingClass,
+      },
+    });
+
+    return res.json({ id: session.id, url: session.url });
+  } catch (err) {
+    console.error("[stripe] create-checkout-session error:", err);
+    return res.status(500).json({ error: err?.message || "Server error" });
+  }
+}
+
+// Accept both paths so you can hit it directly while testing,
+// AND the canonical public path for storefront usage.
+router.post("/public/create-checkout-session", handleCreateCheckoutSession);
+router.post("/create-checkout-session", handleCreateCheckoutSession);
+
+/**
+ * PUBLIC: Retrieve a session (for Success page verification)
  */
 router.get("/public/session/:id", async (req, res) => {
   try {
-    const stripe = getStripe();
+    const stripeSecret = requireEnv("STRIPE_SECRET_KEY");
+    const stripe = new Stripe(stripeSecret, { apiVersion: "2024-06-20" });
+
     const id = String(req.params.id || "").trim();
     if (!id) return res.status(400).json({ error: "Missing session id" });
 
     const session = await stripe.checkout.sessions.retrieve(id, {
-      expand: ["line_items", "payment_intent", "customer_details"],
+      expand: ["line_items", "payment_intent", "shipping_cost.shipping_rate"],
     });
 
-    res.json({
+    // Keep response minimal/safe for public page.
+    return res.json({
       id: session.id,
       status: session.status,
       payment_status: session.payment_status,
       amount_total: session.amount_total,
       currency: session.currency,
-      customer_details: session.customer_details || null,
       metadata: session.metadata || {},
-      line_items: session.line_items || null,
+      line_items: (session.line_items?.data || []).map((li) => ({
+        description: li.description,
+        quantity: li.quantity,
+        amount_total: li.amount_total,
+        currency: li.currency,
+      })),
+      shipping_details: session.shipping_details || null,
     });
-  } catch (e) {
-    console.error("[STRIPE] public/session error", e);
-    res.status(500).json({ error: e?.message || "Failed to load session" });
+  } catch (err) {
+    console.error("[stripe] retrieve session error:", err);
+    return res.status(500).json({ error: err?.message || "Server error" });
   }
 });
 
 /**
- * POST /api/gizmos/stripe/create-checkout-session
- * Body: { id?: string, slug?: string }
+ * WEBHOOK: marks art as sold when checkout completes
+ * Env required:
+ *   STRIPE_WEBHOOK_SECRET
  */
-router.post("/create-checkout-session", async (req, res) => {
-  try {
-    const stripe = getStripe();
+router.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const stripeSecret = process.env.STRIPE_SECRET_KEY;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    const siteUrl = process.env.SITE_URL;
-    if (!siteUrl) return res.status(500).json({ error: "Missing SITE_URL" });
+    if (!stripeSecret) return res.status(500).send("Missing STRIPE_SECRET_KEY");
+    if (!webhookSecret) return res.status(500).send("Missing STRIPE_WEBHOOK_SECRET");
 
-    const { id, slug } = req.body || {};
-    if (!id && !slug) return res.status(400).json({ error: "Provide id or slug" });
+    const stripe = new Stripe(stripeSecret, { apiVersion: "2024-06-20" });
 
-    const art = await getPublishedArtByIdOrSlug({ req, id, slug });
-    if (!art) return res.status(404).json({ error: "Art not found" });
-
-    const status = String(art.status || art._status || "").toLowerCase();
-    if (status && status !== "published") {
-      return res.status(400).json({ error: "Art is not published" });
+    let event;
+    try {
+      const sig = req.headers["stripe-signature"];
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (e) {
+      console.error("[stripe] webhook signature verify failed:", e?.message || e);
+      return res.status(400).send(`Webhook Error: ${e?.message || "Invalid signature"}`);
     }
 
-    const priceCents = resolvePriceCents(art);
-    if (!Number.isFinite(priceCents) || priceCents <= 0) {
-      return res.status(400).json({
-        error:
-          "Invalid pricing. Provide price_cents in cents (e.g. 333300) OR a price string like '3,333.00'.",
-      });
+    try {
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+        const entryId = session?.metadata?.entry_id;
+        const pool = getPool({ app: req.app });
+
+        if (entryId) {
+          // Mark sold:
+          // - status -> "sold"
+          // - data.sold_at -> now
+          // - data.stripe_session_id -> session.id
+          await pool.query(
+            `
+            UPDATE entries
+               SET status = 'sold',
+                   data = jsonb_set(
+                     jsonb_set(COALESCE(data, '{}'::jsonb), '{sold_at}', to_jsonb(now()), true),
+                     '{stripe_session_id}', to_jsonb($2::text), true
+                   ),
+                   updated_at = now()
+             WHERE id = $1::uuid
+            `,
+            [entryId, session.id]
+          );
+        }
+      }
+
+      return res.json({ received: true });
+    } catch (e) {
+      console.error("[stripe] webhook handler error:", e?.message || e);
+      return res.status(500).send("Webhook handler failed");
     }
-
-    const currency = String(art.currency || "USD").toLowerCase();
-    const title = art.title || art._title || "Artwork";
-    const slugSafe = String(art.slug || art._slug || "");
-    const skuSafe = String(art.sku || "");
-
-    const imageUrl =
-      art?.primary_image?.publicUrl ||
-      art?.primary_image?.url ||
-      art?.primary_image ||
-      null;
-
-    const shippingClass = art.shipping_class || "Small";
-
-    const shipping_options = buildShippingOptions({
-      shippingClass,
-      currency,
-    });
-
-    const successPath = process.env.STRIPE_SUCCESS_PATH || "/success";
-    const cancelPath = process.env.STRIPE_CANCEL_PATH || `/art/${encodeURIComponent(slugSafe)}`;
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: [
-        {
-          price_data: {
-            currency,
-            product_data: {
-              name: title,
-              ...(imageUrl ? { images: [imageUrl] } : {}),
-              metadata: { art_slug: slugSafe, sku: skuSafe },
-            },
-            unit_amount: Math.round(priceCents),
-          },
-          quantity: 1,
-        },
-      ],
-
-      shipping_address_collection: { allowed_countries: ["US"] },
-      shipping_options,
-
-      metadata: {
-        art_id: String(art.id || ""),
-        art_slug: slugSafe,
-        shipping_class: String(shippingClass),
-      },
-
-      success_url: `${siteUrl}${successPath}?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${siteUrl}${cancelPath}`,
-    });
-
-    res.json({ url: session.url, id: session.id });
-  } catch (e) {
-    console.error("[STRIPE] create-checkout-session error", e);
-    res.status(500).json({ error: e?.message || "Stripe checkout failed" });
   }
-});
+);
 
 export default router;
