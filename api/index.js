@@ -493,59 +493,6 @@ function authMiddleware(req, res, next) {
   }
 }
 
-function authMiddleware(req, res, next) {
-  const url = req.originalUrl || req.url || "";
-  const path = req.path || "";
-
-  // Global public paths
-  if (path.startsWith("/public/")) return next();
-
-  // ✅ Dynamic public prefixes declared by gizmo packs
-  const publicPrefixes =
-    app.locals && Array.isArray(app.locals.gizmoPublicPrefixes)
-      ? app.locals.gizmoPublicPrefixes
-      : [];
-
-  // ✅ Render/proxy sometimes strips "/api" before Express sees it.
-  // Normalize both variants so either style matches.
-  const urlWithApi = url.startsWith("/api") ? url : `/api${url}`;
-  const urlWithoutApi = url.startsWith("/api") ? url.replace(/^\/api(\/|$)/, "/") : url;
-
-  for (const prefix of publicPrefixes) {
-    if (!prefix) continue;
-
-    const p = String(prefix).trim();
-
-    // check exact and prefix matches, with and without /api
-    const pWithApi = p.startsWith("/api") ? p : `/api${p}`;
-    const pWithoutApi = p.startsWith("/api") ? p.replace(/^\/api(\/|$)/, "/") : p;
-
-    const matches =
-      url === p || url.startsWith(p + "/") ||
-      urlWithApi === pWithApi || urlWithApi.startsWith(pWithApi + "/") ||
-      urlWithoutApi === pWithoutApi || urlWithoutApi.startsWith(pWithoutApi + "/");
-
-    if (matches) return next();
-  }
-
-  // Optional fallback convention:
-  if (/\/gizmos\/[^/]+\/public(\/|$)/.test(url)) return next();
-  if (/\/api\/gizmos\/[^/]+\/public(\/|$)/.test(url)) return next();
-
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "No token provided" });
-
-  const token = authHeader.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "No token provided" });
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: "Invalid token" });
-  }
-}
 
 
 
