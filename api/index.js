@@ -121,6 +121,7 @@ const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { require: true, rejectUnauthorized: false },
 });
+app.locals.pool = pool;
 
 pool.on('error', (err) => {
   console.error('[pg.pool error]', err);
