@@ -1,4 +1,5 @@
 
+
 import express from "express";
 import Stripe from "stripe";
 import { buildShippingOptions } from "./shipping.js";
@@ -38,39 +39,33 @@ function isUuid(value) {
   );
 }
 
-async function lookupArtEntry(pool, entryIdOrSlug) {
-  const key = String(entryIdOrSlug || "").trim();
+async function lookupArtEntry(pool, entryKey) {
+  if (!entryKey) return null;
+
+  const key = String(entryKey).trim();
   if (!key) return null;
 
-  if (isUuid(key)) {
-    const { rows } = await pool.query(
-      `
-      SELECT e.*, ct.slug AS type_slug
-        FROM entries e
-        JOIN content_types ct ON ct.id = e.content_type_id
-       WHERE e.id = $1
-         AND ct.slug = 'art'
-       LIMIT 1
-      `,
-      [key]
-    );
-    return rows[0] || null;
-  }
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
 
-  // slug lookup
-  const { rows } = await pool.query(
-    `
-    SELECT e.*, ct.slug AS type_slug
-      FROM entries e
-      JOIN content_types ct ON ct.id = e.content_type_id
-     WHERE e.slug = $1
-       AND ct.slug = 'art'
-     LIMIT 1
-    `,
-    [key]
-  );
+  const q = `
+    SELECT
+      e.*,
+      COALESCE(e.slug, e.data->>'slug', e.data->>'_slug') AS slug,
+      COALESCE(e.status, e.data->>'status', e.data->>'_status') AS status
+    FROM entries e
+    WHERE
+      e.content_type_id = (SELECT id FROM content_types WHERE slug = 'art' LIMIT 1)
+      AND (
+        ${isUuid ? "e.id::text = $1" : "FALSE"}
+        OR COALESCE(e.slug, e.data->>'slug', e.data->>'_slug') = $1
+      )
+    LIMIT 1
+  `;
+
+  const { rows } = await pool.query(q, [key]);
   return rows[0] || null;
 }
+
 
 function readPriceCents(entry) {
   const data = entry?.data && typeof entry.data === "object" ? entry.data : {};
