@@ -457,7 +457,6 @@ function authMiddleware(req, res, next) {
     }
   }
 
-  // (Optional) keep your old convention as a fallback:
   // Allows: /api/gizmos/<packSlug>/public/*
   if (/\/api\/gizmos\/[^/]+\/public(\/|$)/.test(url)) return next();
 
@@ -474,6 +473,8 @@ function authMiddleware(req, res, next) {
   } catch {
     return res.status(401).json({ error: "Invalid token" });
   }
+  if (/^\/api\/gizmos\/[^/]+\/public(\/|$)/.test(url)) return next();
+  if (/^\/api\/gizmos\/[^/]+\/webhook(\/|$)/.test(url)) return next();
 }
 
 
