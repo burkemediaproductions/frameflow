@@ -99,7 +99,22 @@ process.on('uncaughtException', (err) => {
 });
 
 /* ----------------------- Parsers & logging ------------------------- */
-app.use(express.json({ limit: '2mb' }));
+const jsonParser = express.json({ limit: "2mb" });
+
+// IMPORTANT:
+// Any /api/gizmos/<slug>/webhook route must receive RAW body (for signature verification).
+// So we skip JSON parsing on ALL gizmo webhook URLs (scalable; not Stripe-specific).
+app.use((req, res, next) => {
+  const url = req.originalUrl || req.url || "";
+
+  // generic convention: /api/gizmos/<any>/webhook
+  if (/^\/api\/gizmos\/[^/]+\/webhook(\/|$)/.test(url)) {
+    return next();
+  }
+
+  return jsonParser(req, res, next);
+});
+
 
 app.use((req, res, next) => {
   const start = Date.now();
