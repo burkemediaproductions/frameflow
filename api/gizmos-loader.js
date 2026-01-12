@@ -15,6 +15,12 @@ export async function mountGizmoPacks(app) {
   const cwd = process.cwd();
   console.log("[GIZMOS] mountGizmoPacks() cwd =", cwd);
 
+  // ✅ where we store public route prefixes discovered from packs
+  if (!app.locals) app.locals = {};
+  if (!Array.isArray(app.locals.gizmoPublicPrefixes)) {
+    app.locals.gizmoPublicPrefixes = [];
+  }
+
   // We include both “api/src/gizmos” and “src/gizmos” styles because
   // some installs run from repo root, and some run from /api as CWD.
   const baseDirs = [
@@ -60,23 +66,52 @@ export async function mountGizmoPacks(app) {
       try {
         console.log(`[GIZMOS] ${slug}: importing ->`, entry);
 
-        // If someone accidentally pasted "||||" into the file, this helps you spot it fast.
-        // (Do NOT leave super-verbose dumps forever; it’s just for bring-up.)
         const raw = fs.readFileSync(entry, "utf8");
         const badAtStart = raw.slice(0, 50);
         if (badAtStart.includes("||")) {
-          console.log(`[GIZMOS] ${slug}: WARNING suspicious '||' near file start:`, JSON.stringify(badAtStart));
+          console.log(
+            `[GIZMOS] ${slug}: WARNING suspicious '||' near file start:`,
+            JSON.stringify(badAtStart)
+          );
         }
 
         const mod = await import(pathToFileURL(entry).href);
         const pack = mod?.default;
 
         if (pack && typeof pack.register === "function") {
+          // Mount the pack
           pack.register(app);
           mounted.add(slug);
-          console.log(`[GIZMOS] Mounted: ${slug} (${entry})`);
+
+          // ✅ Collect public prefixes (skip-auth) from the pack
+          const declaredSlug = String(pack.slug || slug).trim();
+          const auth = pack.auth && typeof pack.auth === "object" ? pack.auth : {};
+          const publicPrefixes = Array.isArray(auth.publicPrefixes) ? auth.publicPrefixes : [];
+
+          // Always allow the conventional public path:
+          // /api/gizmos/<slug>/public/*
+          const conventionalPublic = `/api/gizmos/${declaredSlug}/public`;
+
+          const toAdd = [conventionalPublic, ...publicPrefixes]
+            .filter(Boolean)
+            .map((p) => String(p).trim())
+            .filter((p) => p.startsWith("/"));
+
+          for (const p of toAdd) {
+            if (!app.locals.gizmoPublicPrefixes.includes(p)) {
+              app.locals.gizmoPublicPrefixes.push(p);
+            }
+          }
+
+          console.log(`[GIZMOS] Mounted: ${declaredSlug} (${entry})`);
+          console.log(
+            `[GIZMOS] Public prefixes for ${declaredSlug}:`,
+            toAdd.length ? toAdd : "(none)"
+          );
         } else {
-          console.log(`[GIZMOS] ${slug}: missing default export register(app) (skipping)`);
+          console.log(
+            `[GIZMOS] ${slug}: missing default export register(app) (skipping)`
+          );
         }
       } catch (e) {
         console.error(`[GIZMOS] Failed to mount ${slug}.`);
@@ -95,4 +130,6 @@ export async function mountGizmoPacks(app) {
   } else {
     console.log("[GIZMOS] Mounted packs:", Array.from(mounted));
   }
+
+  console.log("[GIZMOS] All public prefixes:", app.locals.gizmoPublicPrefixes);
 }
