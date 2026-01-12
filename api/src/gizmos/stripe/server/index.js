@@ -8,6 +8,7 @@ const stripePack = {
       "/api/gizmos/stripe/checkout", // create checkout session
       "/api/gizmos/stripe/webhook",  // Stripe webhooks MUST be public
       "/api/gizmos/stripe/public",   // if you expose any public helpers
+      "/api/gizmos/stripe/success" 
     ],
   },
 
