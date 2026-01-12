@@ -418,30 +418,42 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 function authMiddleware(req, res, next) {
-  const url = req.originalUrl || req.url || '';
-  const path = req.path || '';
+  const url = req.originalUrl || req.url || "";
+  const path = req.path || "";
 
   // Global public paths
-  if (path.startsWith('/public/')) return next();
+  if (path.startsWith("/public/")) return next();
 
-  // ✅ Public gizmo pack endpoints
+  // ✅ Dynamic public prefixes declared by gizmo packs (scalable)
+  const publicPrefixes = (app.locals && Array.isArray(app.locals.gizmoPublicPrefixes))
+    ? app.locals.gizmoPublicPrefixes
+    : [];
+
+  for (const prefix of publicPrefixes) {
+    if (url === prefix || url.startsWith(prefix + "/")) {
+      return next();
+    }
+  }
+
+  // (Optional) keep your old convention as a fallback:
   // Allows: /api/gizmos/<packSlug>/public/*
   if (/\/api\/gizmos\/[^/]+\/public(\/|$)/.test(url)) return next();
 
   const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'No token provided' });
+  if (!authHeader) return res.status(401).json({ error: "No token provided" });
 
-  const token = authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token provided' });
+  const token = authHeader.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token provided" });
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
   } catch {
-    return res.status(401).json({ error: 'Invalid token' });
+    return res.status(401).json({ error: "Invalid token" });
   }
 }
+
 
 /* ----------------------- Entries ----------------------------------- */
 
