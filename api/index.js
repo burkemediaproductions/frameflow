@@ -405,6 +405,12 @@ async function attachResolvedUsersToEntries(typeId, entries) {
 /* ----------------------- Debug endpoints --------------------------- */
 app.get('/__ping', (_req, res) => res.json({ ok: true, build: Date.now() }));
 app.get('/__routes', (_req, res) => res.json({ routes: listRoutes(app) }));
+app.get('/__gizmo_public', (_req, res) => {
+  res.json({
+    gizmoPublicPrefixes: app.locals?.gizmoPublicPrefixes || [],
+  });
+});
+
 
 /* ----------------------- Auth -------------------------------------- */
 app.post('/api/auth/login', async (req, res) => {
