@@ -452,30 +452,13 @@ function authMiddleware(req, res, next) {
       ? app.locals.gizmoPublicPrefixes
       : [];
 
-  // ✅ Render/proxy sometimes strips "/api" before Express sees it.
-  // Normalize both variants so either style matches.
-  const urlWithApi = url.startsWith("/api") ? url : `/api${url}`;
-  const urlWithoutApi = url.startsWith("/api") ? url.replace(/^\/api(\/|$)/, "/") : url;
-
   for (const prefix of publicPrefixes) {
-    if (!prefix) continue;
-
-    const p = String(prefix).trim();
-
-    // check exact and prefix matches, with and without /api
-    const pWithApi = p.startsWith("/api") ? p : `/api${p}`;
-    const pWithoutApi = p.startsWith("/api") ? p.replace(/^\/api(\/|$)/, "/") : p;
-
-    const matches =
-      url === p || url.startsWith(p + "/") ||
-      urlWithApi === pWithApi || urlWithApi.startsWith(pWithApi + "/") ||
-      urlWithoutApi === pWithoutApi || urlWithoutApi.startsWith(pWithoutApi + "/");
-
-    if (matches) return next();
+    if (url === prefix || url.startsWith(prefix + "/")) {
+      return next();
+    }
   }
 
   // Optional fallback convention:
-  if (/\/gizmos\/[^/]+\/public(\/|$)/.test(url)) return next();
   if (/\/api\/gizmos\/[^/]+\/public(\/|$)/.test(url)) return next();
 
   const authHeader = req.headers.authorization;
@@ -485,13 +468,13 @@ function authMiddleware(req, res, next) {
   if (!token) return res.status(401).json({ error: "No token provided" });
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    req.user = jwt.verify(token, JWT_SECRET);
     next();
   } catch {
     return res.status(401).json({ error: "Invalid token" });
   }
 }
+
 
 
 
