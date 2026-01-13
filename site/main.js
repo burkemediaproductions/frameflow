@@ -441,10 +441,30 @@ function renderDetailView(item, slug) {
     </section>
   `;
 
-  // placeholder until Stripe is wired
-  document.querySelector("#buyBtn")?.addEventListener("click", () => {
-    toast("Checkout coming next — Stripe is installed and ready for keys.");
-  });
+// Stripe Checkout
+document.querySelector("#buyBtn")?.addEventListener("click", async () => {
+  try {
+    const btn = document.querySelector("#buyBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Opening checkout…";
+    }
+
+    // Prefer DB id, fallback to slug
+    const entry = n?._id || n?.id || n?.slug || n?._slug || slug;
+    if (!entry) throw new Error("Missing entry id/slug for checkout.");
+
+    const { url } = await createStripeCheckoutSession({ entry });
+    window.location.href = url;
+  } catch (e) {
+    toast(safe(e?.message || e) || "Checkout error");
+    const btn = document.querySelector("#buyBtn");
+    if (btn) {
+      btn.disabled = !isAvailable(n);
+      btn.textContent = isAvailable(n) ? "Buy" : "Unavailable";
+    }
+  }
+});
 
   document.querySelector("#inquireBtn")?.addEventListener("click", () => {
     toast("Inquiry: add contact form next (or mailto).");
@@ -496,4 +516,3 @@ async function router() {
 
 window.addEventListener("hashchange", router);
 router();
-const API_BASE = import.meta.env.VITE_API_BASE;
