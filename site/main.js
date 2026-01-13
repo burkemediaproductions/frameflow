@@ -1,5 +1,3 @@
-const API_BASE = import.meta.env.VITE_API_BASE;
-
 const LOGO_URL =
   import.meta.env.VITE_LOGO_URL ||
   "https://nvvdqdomdbgcljlxbiwm.supabase.co/storage/v1/object/public/branding/logoUrl-1767926048166.png";
@@ -95,7 +93,13 @@ async function fetchArtList() {
   // - { items: [...] }
   // - { data: [...] }
   // - [...]
-  const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : [];
+  const items = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.data)
+        ? data.data
+        : [];
   return items;
 }
 
@@ -105,6 +109,28 @@ async function fetchArtBySlug(slug) {
   const norm = list.map(normalizeItem);
   const found = norm.find((x) => safe(x.slug || x._slug) === slug);
   return found || null;
+}
+
+async function createStripeCheckoutSession({ entry }) {
+  const base = API_BASE.replace(/\/$/, "");
+  const url = `${base}/api/gizmos/stripe/create-checkout-session`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ entry }), // entry can be ID or slug
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || `HTTP ${res.status} ${res.statusText}`);
+  }
+
+  if (!data?.url) throw new Error("Stripe did not return a checkout url.");
+  return data; // { id, url }
 }
 
 // ---------- UI ----------
@@ -308,13 +334,19 @@ function renderListView({ items = [] }) {
         const price = formatUSDFromCents(n?.price_cents);
 
         const descText = toPlainTextFromTiptap(n?.description);
-        const excerpt = descText ? descText.slice(0, 140) + (descText.length > 140 ? "…" : "") : "A curated piece from our collection.";
+        const excerpt = descText
+          ? descText.slice(0, 140) + (descText.length > 140 ? "…" : "")
+          : "A curated piece from our collection.";
 
         return `
           <article class="card">
             <a class="cardLink" href="#/art/${encodeURIComponent(slug)}" aria-label="${safe(title)}">
               <div class="imgWrap">
-                ${img ? `<img class="img" src="${img}" alt="${safe(title)}" loading="lazy" decoding="async" />` : `<div class="imgPh" aria-hidden="true"></div>`}
+                ${
+                  img
+                    ? `<img class="img" src="${img}" alt="${safe(title)}" loading="lazy" decoding="async" />`
+                    : `<div class="imgPh" aria-hidden="true"></div>`
+                }
               </div>
 
               <div class="cardBody">
@@ -392,7 +424,11 @@ function renderDetailView(item, slug) {
             ${medium ? `<span>${medium}</span>` : ""}
           </div>
 
-          ${(framed || dims) ? `<div class="detailMeta2">${[framed, dims ? `${dims} in` : ""].filter(Boolean).join(" • ")}</div>` : ""}
+          ${
+            framed || dims
+              ? `<div class="detailMeta2">${[framed, dims ? `${dims} in` : ""].filter(Boolean).join(" • ")}</div>`
+              : ""
+          }
 
           <div class="detailPriceRow">
             <div class="detailPrice">${price ? price : "Price on request"}</div>
@@ -417,9 +453,20 @@ function renderDetailView(item, slug) {
     </section>
   `;
 
-  // placeholder until Stripe is wired
-  document.querySelector("#buyBtn")?.addEventListener("click", () => {
-    toast("Checkout coming next — Stripe is installed and ready for keys.");
+  // ✅ Stripe Checkout (READY)
+  document.querySelector("#buyBtn")?.addEventListener("click", async () => {
+    try {
+      // Prefer DB id, fallback to slug
+      const entry = n?._id || n?.id || n?.slug || n?._slug || slug;
+      if (!entry) throw new Error("Missing entry id/slug for checkout.");
+
+      toast("Opening secure checkout…");
+
+      const { url } = await createStripeCheckoutSession({ entry });
+      window.location.href = url;
+    } catch (e) {
+      toast(safe(e?.message || e) || "Checkout error");
+    }
   });
 
   document.querySelector("#inquireBtn")?.addEventListener("click", () => {
