@@ -139,10 +139,41 @@ app.innerHTML = `
           <input id="search" class="search" type="search" placeholder="Search titles…" aria-label="Search titles" />
         </div>
 
-        <select id="filter" class="pill" aria-label="Filter">
-          <option value="available">Available</option>
-          <option value="all">All</option>
-        </select>
+        <div class="connectWrap">
+          <button
+            id="connectBtn"
+            class="connectBtn"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="connectMenu"
+          >
+            Connect
+          </button>
+
+          <div id="connectMenu" class="connectMenu" role="menu" aria-label="Connect links">
+            <a class="connectItem" role="menuitem" href="https://www.ebay.com/usr/dcegallery" target="_blank" rel="noopener noreferrer">
+              <img src="icons/ebay.svg" alt="" width="18" height="18" loading="lazy" decoding="async" />
+              <span>eBay</span>
+            </a>
+            <a class="connectItem" role="menuitem" href="https://www.pinterest.com/dcegallery" target="_blank" rel="noopener noreferrer">
+              <img src="icons/pinterest.svg" alt="" width="18" height="18" loading="lazy" decoding="async" />
+              <span>Pinterest</span>
+            </a>
+            <a class="connectItem" role="menuitem" href="https://www.instagram.com/dcegallery" target="_blank" rel="noopener noreferrer">
+              <img src="icons/instagram.svg" alt="" width="18" height="18" loading="lazy" decoding="async" />
+              <span>Instagram</span>
+            </a>
+            <a class="connectItem" role="menuitem" href="https://www.facebook.com/dcegallery" target="_blank" rel="noopener noreferrer">
+              <img src="icons/facebook.svg" alt="" width="18" height="18" loading="lazy" decoding="async" />
+              <span>Facebook</span>
+            </a>
+            <a class="connectItem" role="menuitem" href="https://www.youtube.com/@DCEGallery" target="_blank" rel="noopener noreferrer">
+              <img src="icons/youtube.svg" alt="" width="18" height="18" loading="lazy" decoding="async" />
+              <span>YouTube</span>
+            </a>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -161,6 +192,48 @@ app.innerHTML = `
 
 const viewEl = document.querySelector("#view");
 const toastEl = document.querySelector("#toast");
+
+// ---------- Connect dropdown (header) ----------
+const connectBtn = document.querySelector("#connectBtn");
+const connectMenu = document.querySelector("#connectMenu");
+
+function setConnectOpen(isOpen) {
+  if (!connectBtn || !connectMenu) return;
+  connectBtn.setAttribute("aria-expanded", String(!!isOpen));
+  connectMenu.classList.toggle("open", !!isOpen);
+}
+
+connectBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
+  const isOpen = connectBtn.getAttribute("aria-expanded") === "true";
+  setConnectOpen(!isOpen);
+  if (!isOpen) {
+    // focus first item for keyboard users
+    const first = connectMenu?.querySelector("a,button,[tabindex]:not([tabindex='-1'])");
+    first?.focus?.();
+  }
+});
+
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (!connectBtn || !connectMenu) return;
+  const isOpen = connectBtn.getAttribute("aria-expanded") === "true";
+  if (!isOpen) return;
+  const inside = connectBtn.contains(t) || connectMenu.contains(t);
+  if (!inside) setConnectOpen(false);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!connectBtn) return;
+  const isOpen = connectBtn.getAttribute("aria-expanded") === "true";
+  if (!isOpen) return;
+  setConnectOpen(false);
+  connectBtn.focus();
+});
+
+// Close menu after selecting a link
+connectMenu?.addEventListener("click", () => setConnectOpen(false));
 
 function toast(msg) {
   toastEl.textContent = msg;
@@ -275,11 +348,10 @@ function renderListView({ items = [] }) {
   const status2El = document.querySelector("#status2");
   const grid = document.querySelector("#grid");
   const searchEl = document.querySelector("#search");
-  const filterEl = document.querySelector("#filter");
 
   function apply() {
     const q = safe(searchEl.value).toLowerCase();
-    const showAvailable = filterEl.value === "available";
+    const showAvailable = true; // header filter replaced by Connect dropdown
 
     const filtered = items
       .map(normalizeItem)
@@ -293,7 +365,7 @@ function renderListView({ items = [] }) {
       });
 
     statusEl.textContent = `${filtered.length} piece(s)`;
-    status2El.textContent = showAvailable ? "Showing available pieces only." : "Showing all pieces.";
+    status2El.textContent = "Showing available pieces only.";
 
     grid.innerHTML = filtered
       .map((raw) => {
@@ -341,7 +413,6 @@ function renderListView({ items = [] }) {
   }
 
   searchEl.addEventListener("input", apply);
-  filterEl.addEventListener("change", apply);
 
   apply();
 }

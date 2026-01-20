@@ -130,6 +130,62 @@ img{ display: block; }
   cursor: pointer;
 }
 
+/* Connect dropdown */
+.connectWrap{ position: relative; }
+
+.connectBtn{
+  border: 0;
+  padding: 11px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #fff;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  box-shadow: 0 12px 24px rgba(22,163,74,0.18);
+}
+
+.connectBtn:focus{
+  outline: none;
+  box-shadow: 0 0 0 6px rgba(22,163,74,0.12), 0 12px 24px rgba(22,163,74,0.18);
+}
+
+.connectMenu{
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  min-width: 210px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+  display: none;
+  z-index: 50;
+}
+
+.connectMenu.open{ display: grid; gap: 6px; }
+
+.connectItem{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: rgba(14,15,19,0.02);
+}
+
+.connectItem:hover,
+.connectItem:focus{
+  border-color: rgba(22,163,74,0.20);
+  background: rgba(22,163,74,0.08);
+  outline: none;
+}
+
+.connectItem img{ width: 18px; height: 18px; }
+
 .hero{
   padding: 18px 0 10px;
   position: relative;
@@ -190,12 +246,12 @@ img{ display: block; }
 /* Mobile Styles for Header */
 @media (max-width: 640px){
 
-  /* Header layout: logo + filter on top row, search full width under */
+  /* Header layout: logo + connect on top row, search full width under */
   .nav{
     display: grid;
     grid-template-columns: 1fr auto;
     grid-template-areas:
-      "logo  filter"
+      "logo  connect"
       "search search";
     gap: 10px;
     padding: 10px 0;
@@ -215,11 +271,11 @@ img{ display: block; }
     object-fit: contain;
   }
 
-  .pill{
-    grid-area: filter;
+  .connectWrap{ grid-area: connect; justify-self: end; }
+
+  .connectBtn{
     width: auto;
     min-width: 140px;
-    justify-self: end;
   }
 
   .searchWrap{
